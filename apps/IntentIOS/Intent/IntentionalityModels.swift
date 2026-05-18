@@ -15,6 +15,30 @@ struct IntentConfiguration: Codable, Equatable {
     var deviceId = ""
     var deviceSecret = ""
     var windowDays = 30
+    var sampleDataEnabled = false
+
+    enum CodingKeys: String, CodingKey {
+        case backendBaseURL
+        case setupKey
+        case deviceName
+        case deviceId
+        case deviceSecret
+        case windowDays
+        case sampleDataEnabled
+    }
+
+    init() {}
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        backendBaseURL = try container.decodeIfPresent(String.self, forKey: .backendBaseURL) ?? ""
+        setupKey = try container.decodeIfPresent(String.self, forKey: .setupKey) ?? ""
+        deviceName = try container.decodeIfPresent(String.self, forKey: .deviceName) ?? UIDevice.current.name
+        deviceId = try container.decodeIfPresent(String.self, forKey: .deviceId) ?? ""
+        deviceSecret = try container.decodeIfPresent(String.self, forKey: .deviceSecret) ?? ""
+        windowDays = try container.decodeIfPresent(Int.self, forKey: .windowDays) ?? 30
+        sampleDataEnabled = try container.decodeIfPresent(Bool.self, forKey: .sampleDataEnabled) ?? false
+    }
 
     var isPaired: Bool {
         !backendBaseURL.isEmpty && !deviceId.isEmpty && !deviceSecret.isEmpty

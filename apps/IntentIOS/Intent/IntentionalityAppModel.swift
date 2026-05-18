@@ -34,7 +34,10 @@ final class IntentionalityAppModel: ObservableObject {
     init() {
         let configuration = IntentConfiguration.load()
         self.configuration = configuration
-        if configuration.isPaired {
+        if configuration.sampleDataEnabled {
+            snapshot = IntentionalitySampleData.snapshot(windowDays: configuration.windowDays)
+            connectionStatus = "Sample data"
+        } else if configuration.isPaired {
             connectionStatus = "Ready"
         }
     }
@@ -48,6 +51,11 @@ final class IntentionalityAppModel: ObservableObject {
     }
 
     func start() {
+        if configuration.sampleDataEnabled {
+            useSampleData()
+            return
+        }
+
         guard configuration.isPaired else {
             connectionStatus = "Needs setup"
             return
@@ -77,6 +85,17 @@ final class IntentionalityAppModel: ObservableObject {
             previous.deviceId != next.deviceId ||
             previous.deviceSecret != next.deviceSecret ||
             previous.windowDays != next.windowDays
+
+        if next.sampleDataEnabled {
+            useSampleData()
+            return
+        }
+
+        if previous.sampleDataEnabled && !next.sampleDataEnabled {
+            snapshot = nil
+            lastNotice = nil
+            lastError = nil
+        }
 
         if !next.isPaired {
             stop()
@@ -136,6 +155,17 @@ final class IntentionalityAppModel: ObservableObject {
     }
 
     func recordCurrentHour() async {
+        if configuration.sampleDataEnabled {
+            snapshot = IntentionalitySampleData.snapshot(
+                windowDays: configuration.windowDays,
+                currentHourScore: pendingScore
+            )
+            lastError = nil
+            lastNotice = "Recorded sample \(formatScore(pendingScore))/10"
+            connectionStatus = "Sample data"
+            return
+        }
+
         guard configuration.isPaired else {
             connectionStatus = "Needs setup"
             return
@@ -173,6 +203,13 @@ final class IntentionalityAppModel: ObservableObject {
         updateConfiguration { configuration in
             configuration.windowDays = min(180, max(1, days))
         }
+    }
+
+    private func useSampleData() {
+        stop()
+        snapshot = IntentionalitySampleData.snapshot(windowDays: configuration.windowDays)
+        connectionStatus = "Sample data"
+        lastError = nil
     }
 
     private var subscriptionArguments: [String: ConvexEncodable?] {
