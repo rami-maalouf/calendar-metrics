@@ -746,6 +746,87 @@ private struct SignalComparisonPoint: Identifiable {
     let previousScore: Double?
 }
 
+private struct WeekdayAveragePoint: Identifiable {
+    var id: Int { weekday }
+    let weekday: Int
+    let shortLabel: String
+    let average: Double?
+    let count: Int
+
+    var isWeekend: Bool {
+        weekday == 1 || weekday == 7
+    }
+
+    static func points(from entries: [IntentionalityEntry]) -> [WeekdayAveragePoint] {
+        let calendar = Calendar.current
+        let symbols = calendar.shortWeekdaySymbols
+        let grouped = Dictionary(grouping: entries) { entry in
+            calendar.component(.weekday, from: entry.date)
+        }
+
+        return (1...7).map { weekday in
+            let dayEntries = grouped[weekday] ?? []
+            let average = meanScore(dayEntries.map(\.score))
+            return WeekdayAveragePoint(
+                weekday: weekday,
+                shortLabel: symbols[safe: weekday - 1] ?? "\(weekday)",
+                average: average,
+                count: dayEntries.count
+            )
+        }
+    }
+}
+
+private struct CorrelationInsight: Identifiable {
+    let id = UUID()
+    let title: String
+    let caption: String
+    let systemImage: String
+    let tint: Color
+
+    static func insights(from snapshot: IntentionalitySnapshot) -> [CorrelationInsight] {
+        let weekdayPoints = WeekdayAveragePoint.points(from: snapshot.recentEntries)
+        let bestDay = weekdayPoints.compactMap { point -> (WeekdayAveragePoint, Double)? in
+            guard let average = point.average else { return nil }
+            return (point, average)
+        }
+        .max { $0.1 < $1.1 }
+
+        let daytimeScores = snapshot.recentEntries.filter { (8...18).contains($0.hour) }.map(\.score)
+        let offHourScores = snapshot.recentEntries.filter { !(8...18).contains($0.hour) }.map(\.score)
+        let daytimeAverage = meanScore(daytimeScores)
+        let offHourAverage = meanScore(offHourScores)
+        let daytimeDelta = daytimeAverage.flatMap { day in offHourAverage.map { day - $0 } }
+
+        let denseDays = snapshot.dailyAverages.filter { $0.count >= 8 }
+        let sparseDays = snapshot.dailyAverages.filter { $0.count > 0 && $0.count < 8 }
+        let denseAverage = meanScore(denseDays.map(\.average))
+        let sparseAverage = meanScore(sparseDays.map(\.average))
+        let captureDelta = denseAverage.flatMap { dense in sparseAverage.map { dense - $0 } }
+
+        return [
+            CorrelationInsight(
+                title: bestDay.map { "Best day: \($0.0.shortLabel)" } ?? "Best day unavailable",
+                caption: bestDay.map { "Averages \(scoreText($0.1)) across \($0.0.count) captured hours." } ?? "Capture more days to compare weekday patterns.",
+                systemImage: "calendar",
+                tint: IntentTheme.accent
+            ),
+            CorrelationInsight(
+                title: daytimeDelta.map { $0 >= 0 ? "Daytime is stronger" : "Off-hours are stronger" } ?? "Hour-band comparison unavailable",
+                caption: daytimeDelta.map { "Daytime vs off-hours differs by \(String(format: "%.1f", abs($0))) points." } ?? "Needs both daytime and off-hour entries.",
+                systemImage: "sun.max.fill",
+                tint: IntentTheme.amber
+            ),
+            CorrelationInsight(
+                title: captureDelta.map { $0 >= 0 ? "More capture tracks better days" : "Sparse days look stronger" } ?? "Capture correlation unavailable",
+                caption: captureDelta.map { "High-capture days differ by \(String(format: "%.1f", abs($0))) points from sparse days." } ?? "Needs a mix of dense and sparse days.",
+                systemImage: "point.3.connected.trianglepath.dotted",
+                tint: IntentTheme.mint
+            )
+        ]
+    }
+}
+
 private struct DailyAverageChart: View {
     let snapshot: IntentionalitySnapshot
     @State private var selectedDay: Date?
@@ -818,6 +899,454 @@ private struct DailyAverageChart: View {
                     }
                 }
                 .frame(height: 240)
+                }
+            }
+        }
+    }
+}
+
+private struct SevenDayMovingAverageChart: View {
+    let snapshot: IntentionalitySnapshot
+    @State private var selectedDate: Date?
+
+    private let targetScore = 6.0
+
+    private enum TargetZone: String {
+        case above = "At or above target"
+        case below = "Below target"
+
+        var color: Color {
+            switch self {
+            case .above:
+                return IntentTheme.mint.opacity(0.22)
+            case .below:
+                return IntentTheme.coral.opacity(0.18)
+            }
+        }
+    }
+
+    private struct MovingAveragePoint: Identifiable {
+        let id: String
+        let date: Date
+        let dailyAverage: Double
+        let movingAverage: Double
+    }
+
+    private struct AreaPoint: Identifiable {
+        let id: String
+        let date: Date
+        let score: Double
+    }
+
+    private struct AreaSegment: Identifiable {
+        let id: Int
+        let zone: TargetZone
+        let points: [AreaPoint]
+    }
+
+    private var series: [MovingAveragePoint] {
+        let days = snapshot.dailyAverages.sorted { $0.dayStartMs < $1.dayStartMs }
+        guard days.count >= 2 else { return [] }
+
+        return days.enumerated().map { index, day in
+            let lowerBound = max(0, index - 6)
+            let window = days[lowerBound...index]
+            let movingAverage = window.map(\.average).reduce(0, +) / Double(window.count)
+
+            return MovingAveragePoint(
+                id: day.id,
+                date: day.date,
+                dailyAverage: day.average,
+                movingAverage: movingAverage
+            )
+        }
+    }
+
+    private var latestPoint: MovingAveragePoint? {
+        series.last
+    }
+
+    private var weekAgoPoint: MovingAveragePoint? {
+        guard series.count > 7 else { return nil }
+        return series[series.count - 8]
+    }
+
+    private var selectedPoint: MovingAveragePoint? {
+        nearestPoint(to: selectedDate) ?? latestPoint
+    }
+
+    private var selectionBinding: Binding<Date?> {
+        Binding {
+            selectedDate
+        } set: { newValue in
+            guard let newValue else {
+                selectedDate = nil
+                return
+            }
+            selectedDate = nearestPoint(to: newValue)?.date
+        }
+    }
+
+    private var weekDelta: Double? {
+        guard let latest = latestPoint, let weekAgo = weekAgoPoint else { return nil }
+        return latest.movingAverage - weekAgo.movingAverage
+    }
+
+    private var targetDelta: Double? {
+        latestPoint.map { $0.movingAverage - targetScore }
+    }
+
+    private var rangeText: String {
+        let values = series.map(\.movingAverage)
+        guard let minValue = values.min(), let maxValue = values.max() else {
+            return "--"
+        }
+
+        return "\(String(format: "%.1f", minValue))-\(String(format: "%.1f", maxValue))"
+    }
+
+    private var chartDomain: ClosedRange<Double> {
+        let values = series.flatMap { [$0.dailyAverage, $0.movingAverage, targetScore] }
+        guard let minValue = values.min(), let maxValue = values.max() else {
+            return 0...10
+        }
+
+        let padding = max(0.35, (maxValue - minValue) * 0.14)
+        let lower = max(0, minValue - padding)
+        let upper = min(10, maxValue + padding)
+        return lower...upper
+    }
+
+    private var dateDomain: ClosedRange<Date>? {
+        guard let first = series.first?.date, let last = series.last?.date else {
+            return nil
+        }
+        return first...last
+    }
+
+    private var areaSegments: [AreaSegment] {
+        guard let first = series.first else { return [] }
+
+        var segments: [AreaSegment] = []
+        var segmentId = 0
+        var activeZone = targetZone(for: first.movingAverage)
+        var activePoints = [
+            AreaPoint(id: "\(segmentId)-0", date: first.date, score: first.movingAverage)
+        ]
+
+        for index in 1..<series.count {
+            let previous = series[index - 1]
+            let current = series[index]
+            let previousZone = targetZone(for: previous.movingAverage)
+            let currentZone = targetZone(for: current.movingAverage)
+
+            if previousZone == currentZone || abs(current.movingAverage - previous.movingAverage) < 0.000_001 {
+                activePoints.append(AreaPoint(id: "\(segmentId)-\(index)", date: current.date, score: current.movingAverage))
+                continue
+            }
+
+            let ratio = (targetScore - previous.movingAverage) / (current.movingAverage - previous.movingAverage)
+            let crossingDate = previous.date.addingTimeInterval(current.date.timeIntervalSince(previous.date) * min(max(ratio, 0), 1))
+            let crossingPoint = AreaPoint(id: "\(segmentId)-cross-\(index)", date: crossingDate, score: targetScore)
+            activePoints.append(crossingPoint)
+
+            segments.append(AreaSegment(id: segmentId, zone: activeZone, points: activePoints))
+
+            segmentId += 1
+            activeZone = currentZone
+            activePoints = [
+                AreaPoint(id: "\(segmentId)-cross-\(index)", date: crossingDate, score: targetScore),
+                AreaPoint(id: "\(segmentId)-\(index)", date: current.date, score: current.movingAverage)
+            ]
+        }
+
+        segments.append(AreaSegment(id: segmentId, zone: activeZone, points: activePoints))
+        return segments
+    }
+
+    var body: some View {
+        ChartCard(title: "7-Day Moving Average", subtitle: "rolling score against target") {
+            if series.isEmpty {
+                EmptyChartState()
+            } else {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack(spacing: 8) {
+                        IntentInsightPill(item: IntentInsightItem(
+                            title: "vs 7d ago",
+                            value: signedScoreText(weekDelta),
+                            subtitle: directionText(weekDelta),
+                            tint: signedColor(weekDelta)
+                        ))
+
+                        IntentInsightPill(item: IntentInsightItem(
+                            title: "vs target",
+                            value: signedScoreText(targetDelta),
+                            subtitle: targetText(targetDelta),
+                            tint: signedColor(targetDelta)
+                        ))
+
+                        IntentInsightPill(item: IntentInsightItem(
+                            title: "range",
+                            value: rangeText,
+                            subtitle: "moving avg",
+                            tint: IntentTheme.accent
+                        ))
+                    }
+
+                    ChartLegend(items: [
+                        .init(title: "7-day avg", color: IntentTheme.accent),
+                        .init(title: "daily score", color: IntentTheme.textPrimary.opacity(0.7)),
+                        .init(title: "target 6", color: IntentTheme.amber)
+                    ])
+
+                    Chart {
+                        ForEach(areaSegments) { segment in
+                            ForEach(segment.points) { point in
+                                AreaMark(
+                                    x: .value("Date", point.date, unit: .day),
+                                    yStart: .value("Target", targetScore),
+                                    yEnd: .value("Moving average", point.score),
+                                    series: .value("Zone", segment.id)
+                                )
+                                .foregroundStyle(by: .value("Zone", segment.zone.rawValue))
+                            }
+                        }
+
+                        ForEach(series) { point in
+                            BarMark(
+                                x: .value("Date", point.date, unit: .day),
+                                y: .value("Daily", point.dailyAverage)
+                            )
+                            .foregroundStyle(scoreColor(point.dailyAverage).opacity(0.34))
+                        }
+
+                        ForEach(series) { point in
+                            LineMark(
+                                x: .value("Date", point.date, unit: .day),
+                                y: .value("Moving average", point.movingAverage)
+                            )
+                            .interpolationMethod(.catmullRom)
+                            .lineStyle(StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round))
+                            .foregroundStyle(IntentTheme.accent)
+                        }
+
+                        RuleMark(y: .value("Target", targetScore))
+                            .foregroundStyle(IntentTheme.amber)
+                            .lineStyle(StrokeStyle(lineWidth: 1.4, dash: [4, 4]))
+
+                        if let selectedPoint {
+                            RuleMark(x: .value("Selected", selectedPoint.date, unit: .day))
+                                .foregroundStyle(Color.white.opacity(0.35))
+                                .lineStyle(StrokeStyle(lineWidth: 1, dash: [2, 3]))
+
+                            PointMark(
+                                x: .value("Selected", selectedPoint.date, unit: .day),
+                                y: .value("Moving average", selectedPoint.movingAverage)
+                            )
+                            .foregroundStyle(Color.white)
+                            .symbolSize(56)
+                        }
+                    }
+                    .chartXSelection(value: selectionBinding)
+                    .chartForegroundStyleScale([
+                        TargetZone.above.rawValue: TargetZone.above.color,
+                        TargetZone.below.rawValue: TargetZone.below.color
+                    ])
+                    .chartXScale(domain: dateDomain ?? Date()...Date())
+                    .chartYScale(domain: chartDomain)
+                    .chartYAxis {
+                        AxisMarks(values: .automatic(desiredCount: 5)) {
+                            AxisGridLine()
+                            AxisValueLabel()
+                                .foregroundStyle(IntentTheme.textSecondary)
+                        }
+                    }
+                    .chartXAxis {
+                        AxisMarks(values: .automatic(desiredCount: 5)) {
+                            AxisValueLabel(format: .dateTime.month(.abbreviated).day())
+                                .foregroundStyle(IntentTheme.textSecondary)
+                        }
+                    }
+                    .chartPlotStyle { plotArea in
+                        plotArea.clipped()
+                    }
+                    .frame(height: 230)
+                    .clipped()
+
+                    if let selectedPoint {
+                        HStack {
+                            Text(selectedPoint.date.formatted(date: .abbreviated, time: .omitted))
+                                .font(.caption)
+                                .foregroundStyle(IntentTheme.textSecondary)
+
+                            Spacer()
+
+                            let delta = selectedPoint.movingAverage - targetScore
+                            HStack(spacing: 8) {
+                                Text("Avg \(scoreText(selectedPoint.movingAverage))")
+                                    .foregroundStyle(IntentTheme.textPrimary)
+
+                                Text("\(signedScoreText(delta)) vs target")
+                                    .foregroundStyle(delta >= 0 ? IntentTheme.mint : IntentTheme.amber)
+                            }
+                            .font(.caption.weight(.semibold))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func nearestPoint(to date: Date?) -> MovingAveragePoint? {
+        guard let date else { return nil }
+        return series.min {
+            abs($0.date.timeIntervalSince(date)) < abs($1.date.timeIntervalSince(date))
+        }
+    }
+
+    private func targetZone(for score: Double) -> TargetZone {
+        score >= targetScore ? .above : .below
+    }
+
+    private func signedScoreText(_ value: Double?) -> String {
+        guard let value else { return "--" }
+        let prefix = value >= 0 ? "+" : ""
+        return "\(prefix)\(String(format: "%.1f", value))"
+    }
+
+    private func directionText(_ value: Double?) -> String {
+        guard let value else { return "need more days" }
+        if value > 0.05 { return "improving" }
+        if value < -0.05 { return "declining" }
+        return "stable"
+    }
+
+    private func targetText(_ value: Double?) -> String {
+        guard let value else { return "target 6" }
+        return value >= 0 ? "above target" : "below target"
+    }
+
+    private func signedColor(_ value: Double?) -> Color {
+        guard let value else { return IntentTheme.textSecondary }
+        return value >= 0 ? IntentTheme.mint : IntentTheme.coral
+    }
+}
+
+private struct DayOfWeekChart: View {
+    let snapshot: IntentionalitySnapshot
+
+    private var points: [WeekdayAveragePoint] {
+        WeekdayAveragePoint.points(from: snapshot.recentEntries)
+    }
+
+    private var plottedPoints: [WeekdayAveragePoint] {
+        points.filter { $0.average != nil }
+    }
+
+    var body: some View {
+        ChartCard(title: "Day of Week", subtitle: "average score by weekday rhythm") {
+            if plottedPoints.isEmpty {
+                EmptyChartState()
+            } else {
+                Chart {
+                    ForEach(points) { point in
+                        BarMark(
+                            x: .value("Day", point.shortLabel),
+                            y: .value("Average", point.average ?? 0),
+                            width: .fixed(32)
+                        )
+                        .foregroundStyle(
+                            point.average == nil
+                                ? Color.clear
+                                : (point.isWeekend ? IntentTheme.coral : IntentTheme.accent)
+                        )
+                        .cornerRadius(5)
+                    }
+                }
+                .chartYScale(domain: 0...10)
+                .chartXScale(domain: points.map(\.shortLabel))
+                .chartXAxis {
+                    AxisMarks(values: points.map(\.shortLabel)) { value in
+                        if let label = value.as(String.self), let point = point(for: label) {
+                            AxisValueLabel(centered: true) {
+                                VStack(spacing: 2) {
+                                    Text(label)
+                                        .font(.caption.weight(.bold))
+                                    Text(averageText(point.average))
+                                        .font(.caption2.weight(.semibold))
+                                        .monospacedDigit()
+                                }
+                                .foregroundStyle(IntentTheme.textSecondary)
+                            }
+                        }
+                    }
+                }
+                .chartYAxis {
+                    AxisMarks(values: [0, 5, 10]) {
+                        AxisGridLine()
+                            .foregroundStyle(Color.white.opacity(0.16))
+                        AxisValueLabel()
+                            .foregroundStyle(IntentTheme.textSecondary)
+                    }
+                }
+                .chartPlotStyle { plotArea in
+                    plotArea
+                        .background(Color.white.opacity(0.025))
+                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                }
+                .frame(height: 180)
+            }
+        }
+    }
+
+    private func point(for label: String) -> WeekdayAveragePoint? {
+        points.first { $0.shortLabel == label }
+    }
+
+    private func averageText(_ average: Double?) -> String {
+        average.map { String(format: "%.1f", $0) } ?? "--"
+    }
+}
+
+private struct CorrelationInsightsCard: View {
+    let snapshot: IntentionalitySnapshot
+
+    private var insights: [CorrelationInsight] {
+        CorrelationInsight.insights(from: snapshot)
+    }
+
+    var body: some View {
+        IntentPanel {
+            VStack(alignment: .leading, spacing: 14) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Pattern Clues")
+                        .font(.headline)
+                        .foregroundStyle(IntentTheme.textPrimary)
+                    Text("simple correlations from the current window")
+                        .font(.caption)
+                        .foregroundStyle(IntentTheme.textSecondary)
+                }
+
+                ForEach(insights) { insight in
+                    HStack(alignment: .top, spacing: 10) {
+                        Image(systemName: insight.systemImage)
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundStyle(insight.tint)
+                            .frame(width: 22, height: 22)
+
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(insight.title)
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(IntentTheme.textPrimary)
+                            Text(insight.caption)
+                                .font(.caption)
+                                .foregroundStyle(IntentTheme.textSecondary)
+                        }
+
+                        Spacer(minLength: 0)
+                    }
                 }
             }
         }
@@ -1361,6 +1890,20 @@ private func scoreColor(_ value: Double) -> Color {
         return IntentTheme.amber
     }
     return IntentTheme.coral
+}
+
+private func meanScore(_ values: [Double]) -> Double? {
+    guard !values.isEmpty else {
+        return nil
+    }
+
+    return values.reduce(0, +) / Double(values.count)
+}
+
+private extension Array {
+    subscript(safe index: Index) -> Element? {
+        indices.contains(index) ? self[index] : nil
+    }
 }
 
 #Preview {
