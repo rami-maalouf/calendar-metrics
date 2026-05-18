@@ -103,40 +103,46 @@ private struct IntentionalityHomeView: View {
 
 private struct IntentionalityTrendsView: View {
     @ObservedObject var model: IntentionalityAppModel
+    private let horizontalPadding: CGFloat = 18
 
     var body: some View {
         IntentScreenBackground {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    HStack(alignment: .top) {
-                        VStack(alignment: .leading, spacing: 5) {
-                            Text("Trends")
-                                .font(.system(size: 34, weight: .black, design: .rounded))
-                                .foregroundStyle(IntentTheme.textPrimary)
+            GeometryReader { geometry in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        HStack(alignment: .top) {
+                            VStack(alignment: .leading, spacing: 5) {
+                                Text("Trends")
+                                    .font(.system(size: 34, weight: .black, design: .rounded))
+                                    .foregroundStyle(IntentTheme.textPrimary)
 
-                            Text("Hourly intentionality")
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(IntentTheme.textSecondary)
+                                Text("Hourly intentionality")
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(IntentTheme.textSecondary)
+                            }
+
+                            Spacer(minLength: 12)
+
+                            WindowPicker(model: model)
+                                .frame(maxWidth: 190)
                         }
 
-                        Spacer(minLength: 12)
-
-                        WindowPicker(model: model)
+                        if let snapshot = model.snapshot {
+                            IntentInsightPillRow(items: trendInsightItems(snapshot: snapshot))
+                            DailyAverageChart(snapshot: snapshot)
+                            SevenDayMovingAverageChart(snapshot: snapshot)
+                            DayOfWeekChart(snapshot: snapshot)
+                            HourOfDayChart(snapshot: snapshot)
+                            CorrelationInsightsCard(snapshot: snapshot)
+                        } else {
+                            LoadingPanel(isPaired: model.isPaired)
+                        }
                     }
-
-                    if let snapshot = model.snapshot {
-                        IntentInsightPillRow(items: trendInsightItems(snapshot: snapshot))
-                        DailyAverageChart(snapshot: snapshot)
-                        DayOfWeekChart(snapshot: snapshot)
-                        HourOfDayChart(snapshot: snapshot)
-                        CorrelationInsightsCard(snapshot: snapshot)
-                    } else {
-                        LoadingPanel(isPaired: model.isPaired)
-                    }
+                    .frame(width: max(0, geometry.size.width - horizontalPadding * 2), alignment: .leading)
+                    .padding(.horizontal, horizontalPadding)
+                    .padding(.top, 14)
+                    .padding(.bottom, 28)
                 }
-                .padding(.horizontal, 18)
-                .padding(.top, 14)
-                .padding(.bottom, 28)
             }
         }
     }
