@@ -1822,16 +1822,10 @@ private func homeInsightItems(snapshot: IntentionalitySnapshot) -> [IntentInsigh
             tint: scoreColor(snapshot.last24Average ?? snapshot.averageScore)
         ),
         IntentInsightItem(
-            title: "capture",
-            value: "\(Int(snapshot.responseRate7d.rounded()))%",
-            subtitle: "past week",
-            tint: IntentTheme.mint
-        ),
-        IntentInsightItem(
-            title: "streak",
-            value: "\(snapshot.currentStreakDays)d",
-            subtitle: "daily rhythm",
-            tint: IntentTheme.coral
+            title: "best today",
+            value: bestToday.map { scoreText($0.score) } ?? "--",
+            subtitle: bestToday.map { "hour \($0.hour)" } ?? "not captured yet",
+            tint: bestToday.map { scoreColor($0.score) } ?? IntentTheme.textSecondary
         )
     ]
 }
