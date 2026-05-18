@@ -1805,7 +1805,16 @@ private struct LabeledInput: View {
 }
 
 private func homeInsightItems(snapshot: IntentionalitySnapshot) -> [IntentInsightItem] {
-    [
+    let todayEntries = snapshot.recentEntries.filter { Calendar.current.isDateInToday($0.date) }
+    let bestToday = todayEntries.max { $0.score < $1.score }
+
+    return [
+        IntentInsightItem(
+            title: "today avg",
+            value: optionalScoreText(snapshot.todayAverage),
+            subtitle: deltaCaption(snapshot.deltaFromYesterday),
+            tint: scoreColor(snapshot.todayAverage ?? snapshot.averageScore)
+        ),
         IntentInsightItem(
             title: "last 24h",
             value: optionalScoreText(snapshot.last24Average),
