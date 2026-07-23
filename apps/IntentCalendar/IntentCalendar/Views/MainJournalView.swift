@@ -31,7 +31,7 @@ struct MainJournalView: View {
             VStack(spacing: 30) {
                 // MARK: - Header
                 VStack {
-                    Text(Date(), style: .date)
+                    Text(Date().journalDate, style: .date)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                     Text("Daily Journal")

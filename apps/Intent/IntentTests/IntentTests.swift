@@ -28,6 +28,33 @@ struct IntentTests {
     }
 
     @MainActor
+    @Test func intentDayTreatsEarlyMorningAsPreviousDay() async throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+
+        let twoAM = calendar.date(from: DateComponents(year: 2026, month: 3, day: 16, hour: 2, minute: 15))!
+        let threeFiftyNine = calendar.date(from: DateComponents(year: 2026, month: 3, day: 16, hour: 3, minute: 59))!
+        let fourAM = calendar.date(from: DateComponents(year: 2026, month: 3, day: 16, hour: 4, minute: 0))!
+        let noon = calendar.date(from: DateComponents(year: 2026, month: 3, day: 16, hour: 12, minute: 0))!
+        let previousAfternoon = calendar.date(from: DateComponents(year: 2026, month: 3, day: 15, hour: 22, minute: 0))!
+
+        #expect(IntentDay.dayKey(for: twoAM, calendar: calendar) == "2026-03-15")
+        #expect(IntentDay.dayKey(for: threeFiftyNine, calendar: calendar) == "2026-03-15")
+        #expect(IntentDay.dayKey(for: fourAM, calendar: calendar) == "2026-03-16")
+        #expect(IntentDay.dayKey(for: noon, calendar: calendar) == "2026-03-16")
+        #expect(IntentDay.isSameDay(twoAM, previousAfternoon, calendar: calendar))
+        #expect(!IntentDay.isSameDay(twoAM, fourAM, calendar: calendar))
+        #expect(
+            IntentDay.start(of: twoAM, calendar: calendar) ==
+                calendar.date(from: DateComponents(year: 2026, month: 3, day: 15, hour: 4, minute: 0))!
+        )
+        #expect(
+            IntentDay.end(of: twoAM, calendar: calendar) ==
+                calendar.date(from: DateComponents(year: 2026, month: 3, day: 16, hour: 4, minute: 0))!
+        )
+    }
+
+    @MainActor
     @Test func fallbackReportBuilderProducesConcreteSections() async throws {
         let review = IntentExistingReview(
             numericMetrics: ["focus": 8, "adherence": 7, "energy": 6],

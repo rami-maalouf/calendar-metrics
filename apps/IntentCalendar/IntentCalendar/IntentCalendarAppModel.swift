@@ -40,7 +40,7 @@ final class IntentCalendarAppModel: ObservableObject {
         self.calendarPermissionsManager = calendarPermissionsManager
         self.calendarRepository = calendarRepository
         self.llmService = llmService
-        self.session = PlanningSessionState.empty(for: Date())
+        self.session = PlanningSessionState.empty(for: Calendar.current.startOfDay(for: Date().journalDate))
         bindDependencyChanges()
     }
 
@@ -114,7 +114,9 @@ final class IntentCalendarAppModel: ObservableObject {
     }
 
     func selectDate(_ date: Date) async {
-        session = PlanningSessionState.empty(for: date)
+        let calendar = Calendar.current
+        let normalized = calendar.startOfDay(for: date.journalDate)
+        session = PlanningSessionState.empty(for: normalized)
         await reloadDay(keepConversation: false)
     }
 
@@ -302,7 +304,7 @@ final class IntentCalendarAppModel: ObservableObject {
 
     private func seedUITestingSession() {
         let calendar = Calendar.current
-        let selectedDate = calendar.startOfDay(for: Date())
+        let selectedDate = calendar.startOfDay(for: Date().journalDate)
 
         let templateCalendarID = "ui-test-template"
         let planningCalendarID = "ui-test-planning"

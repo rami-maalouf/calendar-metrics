@@ -557,7 +557,7 @@ struct ContentView: View {
             )
             .disabled(!model.configuration.dailyReportEnabled)
 
-            Text("The report covers the 24-hour window ending at this time. Set it late, like 2:00 AM, if your day usually runs past midnight.")
+            Text("The report covers the 24-hour window ending at this time. Metrics and charts treat each day as 4:00 AM to 4:00 AM, so early-morning work before 4:00 AM still counts toward the previous day.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
         }
@@ -758,10 +758,8 @@ struct ContentView: View {
 
     private var todaySessions: [IntentDashboardSession] {
         recentSessions.filter { session in
-            Calendar.current.isDate(
-                Date(timeIntervalSince1970: TimeInterval(session.startTimeMs) / 1000),
-                inSameDayAs: Date()
-            )
+            let sessionDate = Date(timeIntervalSince1970: TimeInterval(session.startTimeMs) / 1000)
+            return sessionDate.isSameIntentDay(as: Date())
         }
     }
 

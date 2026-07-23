@@ -188,9 +188,8 @@ final class CalendarRepository {
     }
 
     private func dayInterval(for date: Date) -> DateInterval {
-        let calendar = Calendar.current
-        let start = calendar.startOfDay(for: date)
-        let end = calendar.date(byAdding: .day, value: 1, to: start) ?? start
+        let start = date.journalDayStart
+        let end = date.journalDayEnd
         return DateInterval(start: start, end: end)
     }
 

@@ -20,6 +20,8 @@ const MAX_METRICS_WINDOW_DAYS = 90;
 const DEVICE_HEARTBEAT_INTERVAL_MS = 5 * 60 * 1000;
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
+/** Local hour when a new Intent day begins. Hours 0–3 belong to the previous day. */
+const INTENT_DAY_START_HOUR = 4;
 const INTENTIONALITY_SUBJECT_TYPE = "intentionalityHour";
 const INTENTIONALITY_KEY = "intentionality";
 const DEFAULT_INTENTIONALITY_WINDOW_DAYS = 30;
@@ -258,14 +260,6 @@ function metricSortIndex(key: string) {
   return index >= 0 ? index : INTENT_SIGNAL_ORDER.length + 1;
 }
 
-function observedDayKey(timestamp: number) {
-  const date = new Date(timestamp);
-  const year = date.getUTCFullYear();
-  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
-  const day = String(date.getUTCDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
 function computeDayStreak(dayKeys: string[]) {
   const sortedKeys = [...new Set(dayKeys)].sort((left, right) =>
     left < right ? 1 : left > right ? -1 : 0,
@@ -293,11 +287,6 @@ function computeDayStreak(dayKeys: string[]) {
   }
 
   return streak;
-}
-
-function startOfUTCDay(timestamp: number) {
-  const date = new Date(timestamp);
-  return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
 }
 
 function toFiniteNumber(value?: ConvexNumberArg) {
@@ -363,8 +352,20 @@ function localDateParts(timestamp: number, timeZoneOffsetMinutes: number) {
   };
 }
 
+/**
+ * Calendar date parts for the Intent day containing `timestamp`.
+ * Intent days start at 4:00 AM local time, so 12:00–3:59 AM map to the
+ * previous calendar date.
+ */
+function localIntentDayParts(timestamp: number, timeZoneOffsetMinutes: number) {
+  return localDateParts(
+    timestamp - INTENT_DAY_START_HOUR * HOUR_MS,
+    timeZoneOffsetMinutes,
+  );
+}
+
 function localDayKey(timestamp: number, timeZoneOffsetMinutes: number) {
-  const parts = localDateParts(timestamp, timeZoneOffsetMinutes);
+  const parts = localIntentDayParts(timestamp, timeZoneOffsetMinutes);
   return [
     parts.year,
     String(parts.month).padStart(2, "0"),
@@ -373,9 +374,9 @@ function localDayKey(timestamp: number, timeZoneOffsetMinutes: number) {
 }
 
 function localDayStartMs(timestamp: number, timeZoneOffsetMinutes: number) {
-  const parts = localDateParts(timestamp, timeZoneOffsetMinutes);
+  const parts = localIntentDayParts(timestamp, timeZoneOffsetMinutes);
   return (
-    Date.UTC(parts.year, parts.month - 1, parts.day) -
+    Date.UTC(parts.year, parts.month - 1, parts.day, INTENT_DAY_START_HOUR, 0, 0) -
     timeZoneOffsetMinutes * 60 * 1000
   );
 }
@@ -1508,10 +1509,14 @@ export const getDeviceDashboardState = internalQuery({
 export const getDeviceMetricsState = internalQuery({
   args: {
     windowDays: v.optional(v.number()),
+    timeZoneOffsetMinutes: v.optional(convexNumber),
   },
   handler: async (ctx, args) => {
     const timestamp = now();
     const windowDays = clampMetricsWindowDays(args.windowDays);
+    const timeZoneOffsetMinutes = normalizedTimeZoneOffsetMinutes(
+      args.timeZoneOffsetMinutes,
+    );
     const cutoffTime = timestamp - windowDays * 24 * 60 * 60 * 1000;
 
     const reviewedSessionsDesc = await ctx.db
@@ -1719,7 +1724,7 @@ export const getDeviceMetricsState = internalQuery({
       .filter((value): value is number => typeof value === "number");
     const dailyVolumeMap = new Map<number, { reviewedCount: number; totalFocus: number; focusCount: number }>();
     for (const card of reviewedSessionCards) {
-      const dayStart = startOfUTCDay(card.observedAt);
+      const dayStart = localDayStartMs(card.observedAt, timeZoneOffsetMinutes);
       const existing = dailyVolumeMap.get(dayStart) ?? {
         reviewedCount: 0,
         totalFocus: 0,
@@ -1766,7 +1771,9 @@ export const getDeviceMetricsState = internalQuery({
       qualityScore: roundMetric(averageOf(qualityComponents)),
       dominantCategory,
       streakDays: computeDayStreak(
-        relevantReviewedSessions.map((session) => observedDayKey(session.startTimeMs)),
+        relevantReviewedSessions.map((session) =>
+          localDayKey(session.startTimeMs, timeZoneOffsetMinutes),
+        ),
       ),
       signalAverages,
       categoryBreakdown,

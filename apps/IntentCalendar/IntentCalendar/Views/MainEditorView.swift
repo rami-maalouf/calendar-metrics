@@ -329,7 +329,7 @@ struct MainEditorView: View {
     }
     private func setDate(offset: Int) {
         let calendar = Calendar.current
-        let today = Date()
+        let today = Date().journalDate
 
         // Calculate target date
         let targetDate: Date
@@ -344,7 +344,7 @@ struct MainEditorView: View {
 
     private func getDateLabel(for offset: Int) -> String {
         let calendar = Calendar.current
-        let today = Date()
+        let today = Date().journalDate
         let targetDate: Date
 
         if offset == 0 {
@@ -370,17 +370,23 @@ struct MainEditorView: View {
     private var headerTitle: String {
         guard let rawDate = draftManager.currentDraft?.createdAt else { return "Journal" }
         let date = rawDate.journalDate
+        let today = Date().journalDate
         let calendar = Calendar.current
 
-        // Check relative dates
-        if calendar.isDateInToday(date) {
+        if calendar.isDate(date, inSameDayAs: today) {
             return "Today, \(date.ordinalDateString)"
-        } else if calendar.isDateInYesterday(date) {
-            return "Yesterday, \(date.ordinalDateString)"
-        } else if calendar.isDateInTomorrow(date) {
-            return "Tomorrow, \(date.ordinalDateString)"
-        } else {
-            return date.formatted(date: .abbreviated, time: .omitted)
         }
+
+        if let yesterday = calendar.date(byAdding: .day, value: -1, to: today),
+           calendar.isDate(date, inSameDayAs: yesterday) {
+            return "Yesterday, \(date.ordinalDateString)"
+        }
+
+        if let tomorrow = calendar.date(byAdding: .day, value: 1, to: today),
+           calendar.isDate(date, inSameDayAs: tomorrow) {
+            return "Tomorrow, \(date.ordinalDateString)"
+        }
+
+        return date.formatted(date: .abbreviated, time: .omitted)
     }
 }

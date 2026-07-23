@@ -128,7 +128,7 @@ class VaultManager: ObservableObject {
             let formatter = DateFormatter()
             formatter.dateFormat = "yyyy-MM-dd"
             let calendar = Calendar.current
-            let requestedDay = calendar.startOfDay(for: date)
+            let requestedDay = calendar.startOfDay(for: date.journalDate)
 
             let datedFiles = contents.compactMap { fileURL -> (Date, URL)? in
                 guard fileURL.pathExtension.lowercased() == "md" else {
@@ -159,7 +159,7 @@ class VaultManager: ObservableObject {
     }
 
     func fetchRecentDailyNotes(count: Int = 5) throws -> [DailyNoteSample] {
-        try fetchDailyNotesContext(for: Date(), count: count).map {
+        try fetchDailyNotesContext(for: Date().journalDate, count: count).map {
             DailyNoteSample(date: $0.date, content: $0.content)
         }
     }
