@@ -1044,7 +1044,8 @@ final class IntentAppModel: ObservableObject {
                 body: IntentDeviceMetricsRequest(
                     deviceId: configuration.deviceId,
                     deviceSecret: configuration.deviceSecret,
-                    windowDays: metricsWindowDays
+                    windowDays: metricsWindowDays,
+                    timeZoneOffsetMinutes: IntentDay.timeZoneOffsetMinutes()
                 )
             )
 

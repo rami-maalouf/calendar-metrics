@@ -75,6 +75,7 @@ struct IntentDeviceMetricsRequest: Encodable {
     let deviceId: String
     let deviceSecret: String
     let windowDays: Int
+    let timeZoneOffsetMinutes: Int
 }
 
 struct IntentDeviceDailyReportRequest: Encodable {
