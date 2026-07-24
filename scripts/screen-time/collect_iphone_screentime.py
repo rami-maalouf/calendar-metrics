@@ -313,18 +313,36 @@ def allocate_day(
 
 
 def post_json(url: str, body: dict) -> dict:
-    request = urllib.request.Request(
-        url,
-        data=json.dumps(body).encode("utf-8"),
-        headers={"content-type": "application/json"},
-        method="POST",
+    # use curl so we inherit the system trust store (python.org installs often miss certs)
+    result = subprocess.run(
+        [
+            "/usr/bin/curl",
+            "-sS",
+            "-X",
+            "POST",
+            url,
+            "-H",
+            "content-type: application/json",
+            "--data-binary",
+            "@-",
+            "--max-time",
+            "60",
+            "-w",
+            "\n%{http_code}",
+        ],
+        input=json.dumps(body),
+        capture_output=True,
+        text=True,
+        check=False,
     )
-    try:
-        with urllib.request.urlopen(request, timeout=60) as response:
-            return json.loads(response.read().decode("utf-8"))
-    except urllib.error.HTTPError as error:
-        detail = error.read().decode("utf-8", errors="replace")
-        raise SystemExit(f"ingest failed ({error.code}): {detail}") from error
+    if result.returncode != 0:
+        raise SystemExit(f"ingest curl failed: {result.stderr[:800]}")
+    text = result.stdout.rsplit("\n", 1)
+    payload = text[0] if len(text) == 2 else result.stdout
+    status = text[1] if len(text) == 2 else "?"
+    if not status.startswith("2"):
+        raise SystemExit(f"ingest failed ({status}): {payload[:800]}")
+    return json.loads(payload)
 
 
 def main() -> None:
