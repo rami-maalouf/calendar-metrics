@@ -40,6 +40,44 @@ type HourlyIntentionalityBody = Partial<DeviceAuthBody> & {
   platform?: string;
 };
 
+type ScreenAppBody = {
+  bundleId?: string;
+  title?: string;
+  seconds?: number;
+};
+
+type ScreenHourBody = {
+  hourOfDay?: number;
+  hourStartMs?: number;
+  totalSeconds?: number;
+  topApps?: ScreenAppBody[];
+};
+
+type ScreenIngestBody = DeviceAuthBody & {
+  dayKey?: string;
+  sourceDeviceId?: string;
+  platform?: string;
+  totalSeconds?: number;
+  eventCount?: number;
+  cleanedEventCount?: number;
+  topApps?: ScreenAppBody[];
+  hourlyTotals?: number[];
+  hours?: ScreenHourBody[];
+  apps?: ScreenAppBody[];
+  timeZoneOffsetMinutes?: number;
+  notificationBody?: string;
+};
+
+type ScreenSummaryBody = DeviceAuthBody & {
+  dayKey?: string;
+  includeHours?: boolean;
+};
+
+type ScreenAckBody = DeviceAuthBody & {
+  dayKey?: string;
+  sourceDeviceId?: string;
+};
+
 type ReviewBody = DeviceAuthBody & {
   sessionId?: string;
   numericMetrics?: Record<string, number>;
@@ -1223,4 +1261,133 @@ export const health = httpAction(async () => {
     ok: true,
     service: "intent",
   });
+});
+
+function normalizeScreenApps(apps: ScreenAppBody[] | undefined) {
+  if (!Array.isArray(apps)) {
+    return [];
+  }
+
+  return apps
+    .map((app) => ({
+      bundleId: typeof app.bundleId === "string" ? app.bundleId.trim() : "",
+      title: typeof app.title === "string" ? app.title.trim() : "",
+      seconds: typeof app.seconds === "number" ? app.seconds : 0,
+    }))
+    .filter((app) => app.bundleId.length > 0 && app.seconds > 0);
+}
+
+export const ingestScreenDay = httpAction(async (ctx, request) => {
+  try {
+    const { body } = await readJson<ScreenIngestBody>(request);
+    const device = await authenticateDevice(ctx, body ?? {});
+    if (!device || !body?.deviceId || !body.deviceSecret) {
+      return json(401, { error: "Invalid device credentials." });
+    }
+
+    if (!body.dayKey || !body.sourceDeviceId) {
+      return json(400, { error: "dayKey and sourceDeviceId are required." });
+    }
+
+    if (typeof body.totalSeconds !== "number") {
+      return json(400, { error: "totalSeconds is required." });
+    }
+
+    const result = await ctx.runMutation(internal.intentScreen.ingestScreenDay, {
+      deviceId: body.deviceId,
+      deviceSecret: body.deviceSecret,
+      dayKey: body.dayKey,
+      sourceDeviceId: body.sourceDeviceId,
+      platform: body.platform,
+      totalSeconds: body.totalSeconds,
+      eventCount: typeof body.eventCount === "number" ? body.eventCount : 0,
+      cleanedEventCount:
+        typeof body.cleanedEventCount === "number" ? body.cleanedEventCount : 0,
+      topApps: normalizeScreenApps(body.topApps),
+      hourlyTotals: Array.isArray(body.hourlyTotals) ? body.hourlyTotals : [],
+      hours: Array.isArray(body.hours)
+        ? body.hours
+            .map((hour) => ({
+              hourOfDay: typeof hour.hourOfDay === "number" ? hour.hourOfDay : -1,
+              hourStartMs: typeof hour.hourStartMs === "number" ? hour.hourStartMs : 0,
+              totalSeconds: typeof hour.totalSeconds === "number" ? hour.totalSeconds : 0,
+              topApps: normalizeScreenApps(hour.topApps),
+            }))
+            .filter((hour) => hour.hourOfDay >= 0 && hour.hourOfDay <= 23)
+        : [],
+      apps: normalizeScreenApps(body.apps ?? body.topApps),
+      timeZoneOffsetMinutes:
+        typeof body.timeZoneOffsetMinutes === "number"
+          ? body.timeZoneOffsetMinutes
+          : 0,
+      notificationBody: body.notificationBody,
+    });
+
+    return json(200, result);
+  } catch (error) {
+    return json(500, {
+      error:
+        error instanceof Error ? error.message : "Failed to ingest screen day.",
+    });
+  }
+});
+
+export const deviceScreenSummary = httpAction(async (ctx, request) => {
+  try {
+    const { body } = await readJson<ScreenSummaryBody>(request);
+    const device = await authenticateDevice(ctx, body ?? {});
+    if (!device || !body?.deviceId || !body.deviceSecret) {
+      return json(401, { error: "Invalid device credentials." });
+    }
+
+    const result = await ctx.runQuery(internal.intentScreen.getScreenSummary, {
+      deviceId: body.deviceId,
+      deviceSecret: body.deviceSecret,
+      dayKey: body.dayKey,
+      includeHours: body.includeHours,
+    });
+
+    if (!result) {
+      return json(401, { error: "Invalid device credentials." });
+    }
+
+    return json(200, result);
+  } catch (error) {
+    return json(500, {
+      error:
+        error instanceof Error
+          ? error.message
+          : "Failed to load screen summary.",
+    });
+  }
+});
+
+export const ackScreenNotification = httpAction(async (ctx, request) => {
+  try {
+    const { body } = await readJson<ScreenAckBody>(request);
+    const device = await authenticateDevice(ctx, body ?? {});
+    if (!device || !body?.deviceId || !body.deviceSecret) {
+      return json(401, { error: "Invalid device credentials." });
+    }
+
+    if (!body.dayKey) {
+      return json(400, { error: "dayKey is required." });
+    }
+
+    const result = await ctx.runMutation(internal.intentScreen.ackScreenNotification, {
+      deviceId: body.deviceId,
+      deviceSecret: body.deviceSecret,
+      dayKey: body.dayKey,
+      sourceDeviceId: body.sourceDeviceId,
+    });
+
+    return json(200, result);
+  } catch (error) {
+    return json(500, {
+      error:
+        error instanceof Error
+          ? error.message
+          : "Failed to acknowledge screen notification.",
+    });
+  }
 });

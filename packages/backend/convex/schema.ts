@@ -155,4 +155,68 @@ export default defineSchema({
   })
     .index("by_dedupeKey", ["dedupeKey"])
     .index("by_receivedAt", ["receivedAt"]),
+
+  // daily phone screen rollup from biome App.InFocus (mac collector)
+  intentScreenDays: defineTable({
+    ownerDeviceId: v.string(),
+    dayKey: v.string(),
+    source: v.string(),
+    sourceDeviceId: v.string(),
+    platform: v.string(),
+    totalSeconds: v.number(),
+    eventCount: v.number(),
+    cleanedEventCount: v.number(),
+    topAppsJson: v.string(),
+    hourlyTotalsJson: v.string(),
+    notificationBody: v.string(),
+    notificationDeliveredAt: v.optional(v.number()),
+    timeZoneOffsetMinutes: v.number(),
+    collectedAt: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_owner_day_sourceDevice", [
+      "ownerDeviceId",
+      "dayKey",
+      "sourceDeviceId",
+    ])
+    .index("by_owner_dayKey", ["ownerDeviceId", "dayKey"])
+    .index("by_owner_collectedAt", ["ownerDeviceId", "collectedAt"]),
+
+  // per-app daily rollup
+  intentScreenAppDays: defineTable({
+    ownerDeviceId: v.string(),
+    dayKey: v.string(),
+    sourceDeviceId: v.string(),
+    bundleId: v.string(),
+    title: v.string(),
+    seconds: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_owner_day_sourceDevice", [
+      "ownerDeviceId",
+      "dayKey",
+      "sourceDeviceId",
+    ])
+    .index("by_owner_day_bundle", ["ownerDeviceId", "dayKey", "bundleId"]),
+
+  // per-hour rollup (local day hour 0-23)
+  intentScreenHours: defineTable({
+    ownerDeviceId: v.string(),
+    dayKey: v.string(),
+    sourceDeviceId: v.string(),
+    hourStartMs: v.number(),
+    hourOfDay: v.number(),
+    totalSeconds: v.number(),
+    topAppsJson: v.string(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_owner_day_sourceDevice", [
+      "ownerDeviceId",
+      "dayKey",
+      "sourceDeviceId",
+    ])
+    .index("by_owner_hourStartMs", ["ownerDeviceId", "hourStartMs"]),
 });

@@ -5,11 +5,14 @@ import {
   acknowledgeFocusComplete,
   acknowledgeFocusStart,
   acknowledgeReviewPresented,
+  ackScreenNotification,
   bootstrap,
   deviceDashboard,
   deviceDailyReport,
   deviceIntentionality,
   deviceMetrics,
+  deviceScreenSummary,
+  ingestScreenDay,
   recordHourlyIntentionality,
   health,
   pullDevice,
@@ -62,6 +65,24 @@ http.route({
   path: "/intent/device/intentionality/record",
   method: "POST",
   handler: recordHourlyIntentionality,
+});
+
+http.route({
+  path: "/intent/device/screen/ingest",
+  method: "POST",
+  handler: ingestScreenDay,
+});
+
+http.route({
+  path: "/intent/device/screen/summary",
+  method: "POST",
+  handler: deviceScreenSummary,
+});
+
+http.route({
+  path: "/intent/device/screen/ack-notification",
+  method: "POST",
+  handler: ackScreenNotification,
 });
 
 http.route({
