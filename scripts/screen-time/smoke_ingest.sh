@@ -55,9 +55,28 @@ export INTENT_DEVICE_ID INTENT_DEVICE_SECRET
 AW_IMPORT_BIN="$PWD/.venv/bin/aw-import-screentime" /usr/local/bin/python3.13 collect_iphone_screentime.py
 
 echo "=== summary ==="
+SUMMARY_JSON="$(mktemp)"
 /usr/bin/curl -sS -X POST "$SITE/intent/device/screen/summary" \
   -H 'content-type: application/json' \
   --data-binary "{\"deviceId\":\"$INTENT_DEVICE_ID\",\"deviceSecret\":\"$INTENT_DEVICE_SECRET\",\"includeHours\":true}" \
-  | /usr/bin/python3 -c 'import sys,json; d=json.load(sys.stdin); day=d.get("day") or {}; print(json.dumps({"ok":d.get("ok"),"notificationBody":day.get("notificationBody"),"totalSeconds":day.get("totalSeconds"),"hourCount":len(day.get("hours") or []),"topApps":[a["title"] for a in (day.get("topApps") or [])[:5],"hourlyTotalsNonZero":sum(1 for x in (day.get("hourlyTotals") or []) if x>0)}, indent=2))'
+  > "$SUMMARY_JSON"
+/usr/bin/python3 - "$SUMMARY_JSON" <<'PY'
+import json, sys
+with open(sys.argv[1]) as f:
+    d = json.load(f)
+day = d.get("day") or {}
+hours = day.get("hours") or []
+top = day.get("topApps") or []
+totals = day.get("hourlyTotals") or []
+print(json.dumps({
+    "ok": d.get("ok"),
+    "notificationBody": day.get("notificationBody"),
+    "totalSeconds": day.get("totalSeconds"),
+    "hourCount": len(hours),
+    "topApps": [a.get("title") for a in top[:5]],
+    "hourlyTotalsNonZero": sum(1 for x in totals if x > 0),
+}, indent=2))
+PY
+rm -f "$SUMMARY_JSON"
 
 echo SMOKE_DONE
