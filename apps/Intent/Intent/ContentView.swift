@@ -10,6 +10,7 @@ import SwiftUI
 
 private enum IntentScreen: String, CaseIterable, Identifiable {
     case dashboard
+    case visuals
     case reports
     case metrics
     case settings
@@ -20,10 +21,12 @@ private enum IntentScreen: String, CaseIterable, Identifiable {
         switch self {
         case .dashboard:
             return "Dashboard"
+        case .visuals:
+            return "Visuals"
         case .reports:
             return "Reports"
         case .metrics:
-            return "Visuals"
+            return "Metrics"
         case .settings:
             return "Settings"
         }
@@ -33,6 +36,8 @@ private enum IntentScreen: String, CaseIterable, Identifiable {
         switch self {
         case .dashboard:
             return "Live work ledger"
+        case .visuals:
+            return "The signals, big"
         case .reports:
             return "End-of-day wrap-ups"
         case .metrics:
@@ -46,6 +51,8 @@ private enum IntentScreen: String, CaseIterable, Identifiable {
         switch self {
         case .dashboard:
             return "square.grid.2x2.fill"
+        case .visuals:
+            return "chart.bar.fill"
         case .reports:
             return "doc.text.image.fill"
         case .metrics:
@@ -89,6 +96,8 @@ struct ContentView: View {
                 switch selection {
                 case .dashboard:
                     dashboardView
+                case .visuals:
+                    IntentVisualsView(model: model)
                 case .reports:
                     IntentReportsView(model: model)
                 case .metrics:
@@ -146,7 +155,9 @@ struct ContentView: View {
             switch selection {
             case .dashboard:
                 await model.refreshDashboardNow()
-            case .metrics:
+                // streak badge reads metricsState.dailyDurationSeries; load it silently
+                await model.refreshMetricsOnce()
+            case .visuals, .metrics:
                 await model.refreshMetricsNow()
             case .reports, .settings:
                 break
@@ -196,6 +207,8 @@ struct ContentView: View {
                 Spacer(minLength: 16)
 
                 VStack(alignment: .trailing, spacing: 10) {
+                    IntentStreakBadge(streak: trackingStreak)
+
                     HStack(spacing: 10) {
                         StatusBadge(
                             title: model.connectionStatus,
@@ -769,6 +782,13 @@ struct ContentView: View {
         todaySessions.reduce(0) { partialResult, session in
             partialResult + effectiveDurationMs(for: session)
         }
+    }
+
+    private var trackingStreak: IntentTrackingStreak {
+        IntentTrackingStreak.compute(
+            from: model.metricsState?.dailyDurationSeries ?? [],
+            windowDays: model.metricsWindowDays
+        )
     }
 
     private var completedTodayCount: Int {
