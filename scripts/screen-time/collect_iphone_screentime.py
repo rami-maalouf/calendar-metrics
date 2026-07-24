@@ -348,7 +348,12 @@ def post_json(url: str, body: dict) -> dict:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--day", help="local day YYYY-MM-DD (default: yesterday)")
-    parser.add_argument("--since-days", type=int, default=14)
+    parser.add_argument(
+        "--backfill-days",
+        type=int,
+        help="ingest each of the last N local days (includes today when N>0)",
+    )
+    parser.add_argument("--since-days", type=int, default=21)
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--biome-home", help="path to Biome directory dump")
     args = parser.parse_args()
@@ -357,45 +362,62 @@ def main() -> None:
     load_dotenv(script_dir / ".env")
 
     now_local = datetime.now().astimezone()
-    if args.day:
-        day = args.day
-        tz_offset = local_offset_minutes(parse_day(day))
+    if args.backfill_days is not None:
+        if args.backfill_days < 1:
+            raise SystemExit("--backfill-days must be >= 1")
+        day_keys = [
+            (now_local - timedelta(days=offset)).date().isoformat()
+            for offset in range(args.backfill_days)
+        ]
+    elif args.day:
+        day_keys = [args.day]
     else:
-        yesterday = (now_local - timedelta(days=1)).date()
-        day = yesterday.isoformat()
-        tz_offset = local_offset_minutes(now_local)
+        day_keys = [(now_local - timedelta(days=1)).date().isoformat()]
 
     biome_home = args.biome_home or os.environ.get("BIOME_HOME") or None
     biome_dir = Path(biome_home) if biome_home else None
 
     aw_bin = resolve_aw_bin()
-    print(f"[collect] day={day} tz_offset={tz_offset} aw={aw_bin}")
+    print(f"[collect] days={day_keys} aw={aw_bin}")
     raw_events = fetch_events(aw_bin, args.since_days, biome_dir)
     cleaned, dropped = clean_events(raw_events)
     print(f"[collect] events raw={len(raw_events)} cleaned={len(cleaned)} dropped={dropped}")
 
-    payload = allocate_day(cleaned, day, tz_offset)
-    if payload is None:
-        raise SystemExit(f"no cleaned iphone usage for {day}")
-
-    print(
-        f"[collect] total={format_hours(payload['totalSeconds'])} "
-        f"apps={len(payload['apps'])} hours={len(payload['hours'])}"
-    )
-    print(f"[collect] notification: {payload['notificationBody']}")
-
-    if args.dry_run:
-        print(json.dumps(payload, indent=2)[:4000])
-        return
-
     base_url = require_env_str("CONVEX_SITE_URL").rstrip("/")
-    body = {
-        "deviceId": require_env_str("INTENT_DEVICE_ID"),
-        "deviceSecret": require_env_str("INTENT_DEVICE_SECRET"),
-        **payload,
-    }
-    result = post_json(f"{base_url}/intent/device/screen/ingest", body)
-    print(json.dumps(result, indent=2)[:2000])
+    device_id = require_env_str("INTENT_DEVICE_ID")
+    device_secret = require_env_str("INTENT_DEVICE_SECRET")
+    ingested = 0
+
+    for day in day_keys:
+        tz_offset = local_offset_minutes(parse_day(day))
+        payload = allocate_day(cleaned, day, tz_offset)
+        if payload is None:
+            print(f"[collect] skip {day}: no cleaned iphone usage")
+            continue
+
+        print(
+            f"[collect] {day} total={format_hours(payload['totalSeconds'])} "
+            f"apps={len(payload['apps'])} hours={len(payload['hours'])}"
+        )
+        print(f"[collect] notification: {payload['notificationBody']}")
+
+        if args.dry_run:
+            print(json.dumps(payload, indent=2)[:2000])
+            ingested += 1
+            continue
+
+        body = {
+            "deviceId": device_id,
+            "deviceSecret": device_secret,
+            **payload,
+        }
+        result = post_json(f"{base_url}/intent/device/screen/ingest", body)
+        print(json.dumps(result, indent=2)[:1500])
+        ingested += 1
+
+    if ingested == 0:
+        raise SystemExit("no cleaned iphone usage for requested days")
+    print(f"[collect] done ingested={ingested}")
 
 
 if __name__ == "__main__":
