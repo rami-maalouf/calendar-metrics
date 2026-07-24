@@ -1,6 +1,12 @@
 import Foundation
 
 enum IntentionalitySampleData {
+    private struct SampleDayProfile {
+        let baseline: Double
+        let volatility: Double
+        let completionRate: Double
+    }
+
     static func snapshot(windowDays: Int, currentHourScore: Double? = nil) -> IntentionalitySnapshot {
         let calendar = Calendar.current
         let now = Date()
@@ -90,9 +96,10 @@ enum IntentionalitySampleData {
             guard let day = calendar.date(byAdding: .day, value: -dayOffset, to: calendar.startOfDay(for: currentHourStart)) else {
                 continue
             }
+            let dayProfile = sampleDayProfile()
 
             for hour in 7...22 {
-                if shouldSkip(dayOffset: dayOffset, hour: hour) {
+                if shouldSkip(dayProfile: dayProfile, hour: hour) {
                     continue
                 }
 
@@ -104,7 +111,7 @@ enum IntentionalitySampleData {
                 if hourStart == currentHourStart, let currentHourScore {
                     score = currentHourScore
                 } else {
-                    score = sampleScore(dayOffset: dayOffset, hour: hour)
+                    score = sampleScore(dayProfile: dayProfile, hour: hour)
                 }
 
                 entries.append(
@@ -125,29 +132,65 @@ enum IntentionalitySampleData {
         return entries
     }
 
-    private static func sampleScore(dayOffset: Int, hour: Int) -> Double {
-        let base: Double
-        switch hour {
-        case 8...11:
-            base = 8.1
-        case 12...14:
-            base = 6.7
-        case 15...18:
-            base = 7.6
-        case 19...21:
-            base = 5.8
+    private static func sampleDayProfile() -> SampleDayProfile {
+        let roll = Double.random(in: 0...1)
+        switch roll {
+        case 0..<0.22:
+            return SampleDayProfile(
+                baseline: Double.random(in: 3.1...4.1),
+                volatility: Double.random(in: 0.8...1.4),
+                completionRate: Double.random(in: 0.42...0.68)
+            )
+        case 0.22..<0.48:
+            return SampleDayProfile(
+                baseline: Double.random(in: 5.7...6.6),
+                volatility: Double.random(in: 0.35...0.9),
+                completionRate: Double.random(in: 0.75...0.95)
+            )
         default:
-            base = 5.2
+            return SampleDayProfile(
+                baseline: Double.random(in: 4.2...5.7),
+                volatility: Double.random(in: 0.5...1.1),
+                completionRate: Double.random(in: 0.58...0.88)
+            )
         }
-
-        let weeklyRhythm = sin(Double(dayOffset) * 0.72) * 0.9
-        let hourTexture = cos(Double(hour) * 1.37) * 0.45
-        let recoveryLift = dayOffset < 4 ? Double(4 - dayOffset) * 0.18 : 0
-        return min(10, max(1, (base + weeklyRhythm + hourTexture + recoveryLift) * 10).rounded() / 10)
     }
 
-    private static func shouldSkip(dayOffset: Int, hour: Int) -> Bool {
-        return (dayOffset + hour).isMultiple(of: 9) || (dayOffset.isMultiple(of: 11) && hour < 9)
+    private static func sampleScore(dayProfile: SampleDayProfile, hour: Int) -> Double {
+        let hourEffect: Double
+        switch hour {
+        case 7...8:
+            hourEffect = Double.random(in: -0.5...0.45)
+        case 9...11:
+            hourEffect = Double.random(in: 0.0...0.75)
+        case 12...14:
+            hourEffect = Double.random(in: -0.75...0.35)
+        case 15...17:
+            hourEffect = Double.random(in: -0.2...0.65)
+        case 18...20:
+            hourEffect = Double.random(in: -0.7...0.25)
+        default:
+            hourEffect = Double.random(in: -1.0...0.15)
+        }
+
+        let localNoise = Double.random(in: -dayProfile.volatility...dayProfile.volatility)
+        let occasionalSwing = Double.random(in: 0...1) < 0.14 ? Double.random(in: -1.6...1.2) : 0
+        let rawScore = dayProfile.baseline + hourEffect + localNoise + occasionalSwing
+        return min(7, max(3, (rawScore * 10).rounded() / 10))
+    }
+
+    private static func shouldSkip(dayProfile: SampleDayProfile, hour: Int) -> Bool {
+        let hourPenalty: Double
+        switch hour {
+        case 7...8:
+            hourPenalty = 0.16
+        case 19...22:
+            hourPenalty = 0.2
+        default:
+            hourPenalty = 0
+        }
+
+        return Double.random(in: 0...1) > max(0.05, dayProfile.completionRate - hourPenalty)
     }
 
     private static func hourlyAverages(from entries: [IntentionalityEntry]) -> [IntentionalityHourlyAverage] {

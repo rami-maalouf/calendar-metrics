@@ -462,6 +462,10 @@ private struct ScoreSummaryHero: View {
         ScoreBand(score: score)
     }
 
+    private var scoreFillRatio: Double {
+        min(max(score / 10, 0), 1)
+    }
+
     private var completionText: String {
         let capturedToday = snapshot.recentEntries.filter { Calendar.current.isDateInToday($0.date) }.count
         if capturedToday == 0 {
@@ -502,18 +506,21 @@ private struct ScoreSummaryHero: View {
                 }
 
                 GeometryReader { proxy in
+                    let fillWidth = max(8, proxy.size.width * scoreFillRatio)
+
                     ZStack(alignment: .leading) {
                         Capsule()
                             .fill(Color.white.opacity(0.12))
-                        Capsule()
-                            .fill(
-                                LinearGradient(
-                                    colors: [IntentTheme.coral, IntentTheme.amber, IntentTheme.accent, IntentTheme.mint],
-                                    startPoint: .leading,
-                                    endPoint: .trailing
-                                )
-                            )
-                            .frame(width: max(8, proxy.size.width * min(max(score / 10, 0), 1)))
+                        LinearGradient(
+                            colors: [IntentTheme.coral, IntentTheme.amber, IntentTheme.accent, IntentTheme.mint],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                        .frame(width: proxy.size.width)
+                        .mask(alignment: .leading) {
+                            Capsule()
+                                .frame(width: fillWidth)
+                        }
                     }
                 }
                 .frame(height: 10)
@@ -535,7 +542,10 @@ private struct TodaySignalComparisonChart: View {
     @State private var selectedOffset: Int?
 
     private var comparison: SignalComparison {
-        SignalComparison(entries: snapshot.recentEntries)
+        SignalComparison(
+            entries: snapshot.recentEntries,
+            generatedAt: Date(timeIntervalSince1970: Double(snapshot.generatedAt) / 1000)
+        )
     }
 
     private var selectedPoint: SignalComparisonPoint? {
@@ -548,7 +558,7 @@ private struct TodaySignalComparisonChart: View {
     }
 
     var body: some View {
-        ChartCard(title: "Today Signal", subtitle: "last 48 hours vs previous 48 hours") {
+        ChartCard(title: "Today Signal", subtitle: "last 24 hours vs previous 24 hours") {
             if comparison.points.allSatisfy({ $0.currentScore == nil && $0.previousScore == nil }) {
                 EmptyChartState()
             } else {
@@ -567,47 +577,38 @@ private struct TodaySignalComparisonChart: View {
                             if let score = point.previousScore {
                                 LineMark(
                                     x: .value("Hour offset", point.offset),
-                                    y: .value("Previous score", score)
+                                    y: .value("Score", score),
+                                    series: .value("Window", "Previous")
                                 )
-                                .interpolationMethod(.catmullRom)
-                                .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round, dash: [5, 5]))
+                                .interpolationMethod(.linear)
+                                .lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round, dash: [3, 7]))
                                 .foregroundStyle(IntentTheme.amber.opacity(0.78))
 
                                 PointMark(
                                     x: .value("Hour offset", point.offset),
-                                    y: .value("Previous score", score)
+                                    y: .value("Score", score)
                                 )
-                                .symbolSize(18)
-                                .foregroundStyle(IntentTheme.amber.opacity(0.72))
+                                .symbol(.circle)
+                                .symbolSize(20)
+                                .foregroundStyle(IntentTheme.amber.opacity(0.88))
                             }
 
                             if let score = point.currentScore {
-                                AreaMark(
-                                    x: .value("Hour offset", point.offset),
-                                    y: .value("Current score", score)
-                                )
-                                .interpolationMethod(.catmullRom)
-                                .foregroundStyle(
-                                    LinearGradient(
-                                        colors: [IntentTheme.accent.opacity(0.28), IntentTheme.accent.opacity(0.03)],
-                                        startPoint: .top,
-                                        endPoint: .bottom
-                                    )
-                                )
-
                                 LineMark(
                                     x: .value("Hour offset", point.offset),
-                                    y: .value("Current score", score)
+                                    y: .value("Score", score),
+                                    series: .value("Window", "Now")
                                 )
-                                .interpolationMethod(.catmullRom)
-                                .lineStyle(StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round))
+                                .interpolationMethod(.linear)
+                                .lineStyle(StrokeStyle(lineWidth: 3.5, lineCap: .round, lineJoin: .round))
                                 .foregroundStyle(IntentTheme.accent)
 
                                 PointMark(
                                     x: .value("Hour offset", point.offset),
-                                    y: .value("Current score", score)
+                                    y: .value("Score", score)
                                 )
-                                .symbolSize(32)
+                                .symbol(.circle)
+                                .symbolSize(36)
                                 .foregroundStyle(IntentTheme.textPrimary)
                             }
                         }
@@ -619,7 +620,7 @@ private struct TodaySignalComparisonChart: View {
                         }
                     }
                     .chartYScale(domain: 0...10)
-                    .chartXScale(domain: 0...47)
+                    .chartXScale(domain: 0...23)
                     .chartXSelection(value: $selectedOffset)
                     .chartYAxis {
                         AxisMarks(values: [0, 2, 4, 6, 8, 10]) {
@@ -629,7 +630,7 @@ private struct TodaySignalComparisonChart: View {
                         }
                     }
                     .chartXAxis {
-                        AxisMarks(values: [0, 12, 24, 36, 47]) { value in
+                        AxisMarks(values: [0, 3, 6, 9, 12, 15, 18, 21, 23]) { value in
                             AxisGridLine()
                             if let offset = value.as(Int.self) {
                                 AxisValueLabel {
@@ -675,7 +676,7 @@ private struct SignalComparisonSummary: View {
                     .font(.system(size: 16, weight: .bold, design: .rounded))
                     .foregroundStyle(IntentTheme.amber)
                     .monospacedDigit()
-                Text("previous 48h")
+                Text("previous 24h")
                     .font(.caption2)
                     .foregroundStyle(IntentTheme.textSecondary)
             }
@@ -705,15 +706,14 @@ private struct SignalComparison {
     let points: [SignalComparisonPoint]
     private let calendar = Calendar.current
 
-    init(entries: [IntentionalityEntry]) {
+    init(entries: [IntentionalityEntry], generatedAt: Date) {
         let sortedEntries = entries.sorted { $0.hourStartMs < $1.hourStartMs }
-        let latestDate = sortedEntries.last?.date ?? Date()
-        let latestHour = Calendar.current.dateInterval(of: .hour, for: latestDate)?.start ?? latestDate
-        let currentStart = Calendar.current.date(byAdding: .hour, value: -47, to: latestHour) ?? latestHour
-        let previousStart = Calendar.current.date(byAdding: .hour, value: -48, to: currentStart) ?? currentStart
+        let latestHour = Calendar.current.dateInterval(of: .hour, for: generatedAt)?.start ?? generatedAt
+        let currentStart = Calendar.current.date(byAdding: .hour, value: -23, to: latestHour) ?? latestHour
+        let previousStart = Calendar.current.date(byAdding: .hour, value: -24, to: currentStart) ?? currentStart
         let entriesByHour = Dictionary(uniqueKeysWithValues: sortedEntries.map { ($0.hourStartMs, $0) })
 
-        points = (0..<48).map { offset in
+        points = (0..<24).map { offset in
             let currentDate = Calendar.current.date(byAdding: .hour, value: offset, to: currentStart) ?? currentStart
             let previousDate = Calendar.current.date(byAdding: .hour, value: offset, to: previousStart) ?? previousStart
             let currentKey = Int(currentDate.timeIntervalSince1970 * 1000)
@@ -730,10 +730,10 @@ private struct SignalComparison {
     }
 
     func axisLabel(for offset: Int) -> String {
-        if offset == 47 {
-            return "now"
+        guard let date = points.first(where: { $0.offset == offset })?.currentDate else {
+            return ""
         }
-        return "-\(47 - offset)h"
+        return String(format: "%02d", calendar.component(.hour, from: date))
     }
 }
 
@@ -1071,26 +1071,29 @@ private struct SevenDayMovingAverageChart: View {
             } else {
                 VStack(alignment: .leading, spacing: 12) {
                     HStack(spacing: 8) {
-                        IntentInsightPill(item: IntentInsightItem(
+                        CompactTrendStat(item: IntentInsightItem(
                             title: "vs 7d ago",
                             value: signedScoreText(weekDelta),
                             subtitle: directionText(weekDelta),
                             tint: signedColor(weekDelta)
                         ))
+                        .frame(maxWidth: .infinity)
 
-                        IntentInsightPill(item: IntentInsightItem(
+                        CompactTrendStat(item: IntentInsightItem(
                             title: "vs target",
                             value: signedScoreText(targetDelta),
                             subtitle: targetText(targetDelta),
                             tint: signedColor(targetDelta)
                         ))
+                        .frame(maxWidth: .infinity)
 
-                        IntentInsightPill(item: IntentInsightItem(
+                        CompactTrendStat(item: IntentInsightItem(
                             title: "range",
                             value: rangeText,
                             subtitle: "moving avg",
                             tint: IntentTheme.accent
                         ))
+                        .frame(maxWidth: .infinity)
                     }
 
                     ChartLegend(items: [
@@ -1170,6 +1173,7 @@ private struct SevenDayMovingAverageChart: View {
                     .chartPlotStyle { plotArea in
                         plotArea.clipped()
                     }
+                    .frame(maxWidth: .infinity)
                     .frame(height: 230)
                     .clipped()
 
@@ -1231,6 +1235,40 @@ private struct SevenDayMovingAverageChart: View {
     private func signedColor(_ value: Double?) -> Color {
         guard let value else { return IntentTheme.textSecondary }
         return value >= 0 ? IntentTheme.mint : IntentTheme.coral
+    }
+}
+
+private struct CompactTrendStat: View {
+    let item: IntentInsightItem
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(item.title.uppercased())
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(IntentTheme.textSecondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+
+            Text(item.value)
+                .font(.system(size: 16, weight: .semibold, design: .rounded))
+                .foregroundStyle(item.tint)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+
+            Text(item.subtitle)
+                .font(.caption2)
+                .foregroundStyle(IntentTheme.textSecondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 9)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(item.tint.opacity(0.28), lineWidth: 1)
+        )
     }
 }
 
