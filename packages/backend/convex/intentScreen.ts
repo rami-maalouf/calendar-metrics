@@ -146,11 +146,71 @@ function normalizeHours(hours: ScreenHour[]) {
   return [...byHour.values()].sort((a, b) => a.hourOfDay - b.hourOfDay);
 }
 
+// single-tenant intent: all paired devices read/write the same phone screen rollups
+const SHARED_SCREEN_OWNER_ID = "intent_shared";
+
 async function getDeviceDoc(ctx: any, deviceId: string) {
   return await ctx.db
     .query("intentDevices")
     .withIndex("by_deviceId", (q: any) => q.eq("deviceId", deviceId))
     .unique();
+}
+
+async function authenticateScreenDevice(ctx: any, deviceId: string, deviceSecret: string) {
+  const device = await getDeviceDoc(ctx, deviceId);
+  if (!device || device.deviceSecret !== deviceSecret) {
+    return null;
+  }
+  return device;
+}
+
+async function findScreenDay(
+  ctx: any,
+  ownerCandidates: string[],
+  dayKey: string | undefined,
+) {
+  if (dayKey) {
+    for (const ownerDeviceId of ownerCandidates) {
+      const rows = await ctx.db
+        .query("intentScreenDays")
+        .withIndex("by_owner_dayKey", (q: any) =>
+          q.eq("ownerDeviceId", ownerDeviceId).eq("dayKey", dayKey),
+        )
+        .collect();
+      const day = rows.sort(
+        (a: Doc<"intentScreenDays">, b: Doc<"intentScreenDays">) =>
+          b.collectedAt - a.collectedAt,
+      )[0];
+      if (day) {
+        return day as Doc<"intentScreenDays">;
+      }
+    }
+    return null;
+  }
+
+  const byDayKey = new Map<string, Doc<"intentScreenDays">>();
+  for (const ownerDeviceId of ownerCandidates) {
+    const rows = await ctx.db
+      .query("intentScreenDays")
+      .withIndex("by_owner_collectedAt", (q: any) => q.eq("ownerDeviceId", ownerDeviceId))
+      .order("desc")
+      .take(90);
+    for (const row of rows) {
+      const existing = byDayKey.get(row.dayKey);
+      if (!existing || row.collectedAt > existing.collectedAt) {
+        byDayKey.set(row.dayKey, row);
+      }
+    }
+  }
+
+  return (
+    [...byDayKey.values()].sort((a, b) => b.dayKey.localeCompare(a.dayKey))[0] ??
+    null
+  );
+}
+
+function screenOwnerCandidates(deviceId: string) {
+  return [SHARED_SCREEN_OWNER_ID, deviceId];
 }
 
 async function deleteDayChildren(
@@ -236,8 +296,8 @@ export const ingestScreenDay = internalMutation({
     notificationBody: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const device = await getDeviceDoc(ctx, args.deviceId);
-    if (!device || device.deviceSecret !== args.deviceSecret) {
+    const device = await authenticateScreenDevice(ctx, args.deviceId, args.deviceSecret);
+    if (!device) {
       throw new Error("Invalid device credentials.");
     }
 
@@ -250,6 +310,7 @@ export const ingestScreenDay = internalMutation({
       throw new Error("sourceDeviceId is required.");
     }
 
+    const ownerDeviceId = SHARED_SCREEN_OWNER_ID;
     const topApps = normalizeApps(args.topApps).slice(0, TOP_APPS_LIMIT);
     const apps = normalizeApps(args.apps);
     const hours = normalizeHours(args.hours);
@@ -271,13 +332,13 @@ export const ingestScreenDay = internalMutation({
       .query("intentScreenDays")
       .withIndex("by_owner_day_sourceDevice", (q: any) =>
         q
-          .eq("ownerDeviceId", args.deviceId)
+          .eq("ownerDeviceId", ownerDeviceId)
           .eq("dayKey", args.dayKey)
           .eq("sourceDeviceId", sourceDeviceId),
       )
       .unique();
 
-    await deleteDayChildren(ctx, args.deviceId, args.dayKey, sourceDeviceId);
+    await deleteDayChildren(ctx, ownerDeviceId, args.dayKey, sourceDeviceId);
 
     let dayId: Id<"intentScreenDays">;
     if (existing) {
@@ -299,7 +360,7 @@ export const ingestScreenDay = internalMutation({
       dayId = existing._id;
     } else {
       dayId = await ctx.db.insert("intentScreenDays", {
-        ownerDeviceId: args.deviceId,
+        ownerDeviceId,
         dayKey: args.dayKey,
         source: SCREEN_SOURCE,
         sourceDeviceId,
@@ -319,7 +380,7 @@ export const ingestScreenDay = internalMutation({
 
     for (const app of apps) {
       await ctx.db.insert("intentScreenAppDays", {
-        ownerDeviceId: args.deviceId,
+        ownerDeviceId,
         dayKey: args.dayKey,
         sourceDeviceId,
         bundleId: app.bundleId,
@@ -332,7 +393,7 @@ export const ingestScreenDay = internalMutation({
 
     for (const hour of hours) {
       await ctx.db.insert("intentScreenHours", {
-        ownerDeviceId: args.deviceId,
+        ownerDeviceId,
         dayKey: args.dayKey,
         sourceDeviceId,
         hourStartMs: hour.hourStartMs,
@@ -364,29 +425,12 @@ export const getScreenSummary = internalQuery({
     includeHours: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
-    const device = await getDeviceDoc(ctx, args.deviceId);
-    if (!device || device.deviceSecret !== args.deviceSecret) {
+    const device = await authenticateScreenDevice(ctx, args.deviceId, args.deviceSecret);
+    if (!device) {
       return null;
     }
 
-    let day: Doc<"intentScreenDays"> | null = null;
-    if (args.dayKey) {
-      const rows = await ctx.db
-        .query("intentScreenDays")
-        .withIndex("by_owner_dayKey", (q: any) =>
-          q.eq("ownerDeviceId", args.deviceId).eq("dayKey", args.dayKey),
-        )
-        .collect();
-      day = rows.sort((a, b) => b.collectedAt - a.collectedAt)[0] ?? null;
-    } else {
-      const rows = await ctx.db
-        .query("intentScreenDays")
-        .withIndex("by_owner_collectedAt", (q: any) => q.eq("ownerDeviceId", args.deviceId))
-        .order("desc")
-        .take(20);
-      day = rows[0] ?? null;
-    }
-
+    const day = await findScreenDay(ctx, screenOwnerCandidates(args.deviceId), args.dayKey);
     if (!day) {
       return {
         ok: true,
@@ -400,9 +444,9 @@ export const getScreenSummary = internalQuery({
         .query("intentScreenHours")
         .withIndex("by_owner_day_sourceDevice", (q: any) =>
           q
-            .eq("ownerDeviceId", args.deviceId)
-            .eq("dayKey", day!.dayKey)
-            .eq("sourceDeviceId", day!.sourceDeviceId),
+            .eq("ownerDeviceId", day.ownerDeviceId)
+            .eq("dayKey", day.dayKey)
+            .eq("sourceDeviceId", day.sourceDeviceId),
         )
         .collect();
       hours.sort((a, b) => a.hourOfDay - b.hourOfDay);
@@ -423,6 +467,47 @@ export const getScreenSummary = internalQuery({
   },
 });
 
+export const listRecentScreenDays = internalQuery({
+  args: {
+    deviceId: v.string(),
+    deviceSecret: v.string(),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const device = await authenticateScreenDevice(ctx, args.deviceId, args.deviceSecret);
+    if (!device) {
+      return null;
+    }
+
+    const limit = Math.min(90, Math.max(1, Math.floor(args.limit ?? 21)));
+    const byDayKey = new Map<string, Doc<"intentScreenDays">>();
+
+    for (const ownerDeviceId of screenOwnerCandidates(args.deviceId)) {
+      const rows = await ctx.db
+        .query("intentScreenDays")
+        .withIndex("by_owner_collectedAt", (q: any) => q.eq("ownerDeviceId", ownerDeviceId))
+        .order("desc")
+        .take(limit * 3);
+      for (const row of rows) {
+        const existing = byDayKey.get(row.dayKey);
+        if (!existing || row.collectedAt > existing.collectedAt) {
+          byDayKey.set(row.dayKey, row);
+        }
+      }
+    }
+
+    const days = [...byDayKey.values()]
+      .sort((a, b) => b.dayKey.localeCompare(a.dayKey))
+      .slice(0, limit)
+      .map((day) => serializeDay(day));
+
+    return {
+      ok: true,
+      days,
+    };
+  },
+});
+
 export const ackScreenNotification = internalMutation({
   args: {
     deviceId: v.string(),
@@ -431,27 +516,35 @@ export const ackScreenNotification = internalMutation({
     sourceDeviceId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const device = await getDeviceDoc(ctx, args.deviceId);
-    if (!device || device.deviceSecret !== args.deviceSecret) {
+    const device = await authenticateScreenDevice(ctx, args.deviceId, args.deviceSecret);
+    if (!device) {
       throw new Error("Invalid device credentials.");
     }
 
-    const rows = await ctx.db
-      .query("intentScreenDays")
-      .withIndex("by_owner_dayKey", (q: any) =>
-        q.eq("ownerDeviceId", args.deviceId).eq("dayKey", args.dayKey),
-      )
-      .collect();
-
-    const day =
-      (args.sourceDeviceId
-        ? rows.find((row) => row.sourceDeviceId === args.sourceDeviceId)
-        : null) ??
-      rows.sort((a, b) => b.collectedAt - a.collectedAt)[0] ??
-      null;
-
+    const day = await findScreenDay(ctx, screenOwnerCandidates(args.deviceId), args.dayKey);
     if (!day) {
       return { ok: false, error: "Day not found." };
+    }
+
+    if (args.sourceDeviceId && day.sourceDeviceId !== args.sourceDeviceId) {
+      const rows = await ctx.db
+        .query("intentScreenDays")
+        .withIndex("by_owner_dayKey", (q: any) =>
+          q.eq("ownerDeviceId", day.ownerDeviceId).eq("dayKey", args.dayKey),
+        )
+        .collect();
+      const matched =
+        rows.find((row) => row.sourceDeviceId === args.sourceDeviceId) ?? day;
+      const timestamp = now();
+      await ctx.db.patch(matched._id, {
+        notificationDeliveredAt: timestamp,
+        updatedAt: timestamp,
+      });
+      return {
+        ok: true,
+        dayKey: matched.dayKey,
+        notificationDeliveredAt: timestamp,
+      };
     }
 
     const timestamp = now();
@@ -474,4 +567,5 @@ export const screenCleaningLimits = {
   capEventSeconds: CAP_EVENT_SECONDS,
   topAppsLimit: TOP_APPS_LIMIT,
   source: SCREEN_SOURCE,
+  sharedOwnerId: SHARED_SCREEN_OWNER_ID,
 };

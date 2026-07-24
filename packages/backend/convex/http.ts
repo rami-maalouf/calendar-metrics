@@ -11,6 +11,7 @@ import {
   deviceDailyReport,
   deviceIntentionality,
   deviceMetrics,
+  deviceScreenRecent,
   deviceScreenSummary,
   ingestScreenDay,
   recordHourlyIntentionality,
@@ -77,6 +78,12 @@ http.route({
   path: "/intent/device/screen/summary",
   method: "POST",
   handler: deviceScreenSummary,
+});
+
+http.route({
+  path: "/intent/device/screen/recent",
+  method: "POST",
+  handler: deviceScreenRecent,
 });
 
 http.route({

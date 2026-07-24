@@ -73,6 +73,10 @@ type ScreenSummaryBody = DeviceAuthBody & {
   includeHours?: boolean;
 };
 
+type ScreenRecentBody = DeviceAuthBody & {
+  limit?: number;
+};
+
 type ScreenAckBody = DeviceAuthBody & {
   dayKey?: string;
   sourceDeviceId?: string;
@@ -1358,6 +1362,35 @@ export const deviceScreenSummary = httpAction(async (ctx, request) => {
         error instanceof Error
           ? error.message
           : "Failed to load screen summary.",
+    });
+  }
+});
+
+export const deviceScreenRecent = httpAction(async (ctx, request) => {
+  try {
+    const { body } = await readJson<ScreenRecentBody>(request);
+    const device = await authenticateDevice(ctx, body ?? {});
+    if (!device || !body?.deviceId || !body.deviceSecret) {
+      return json(401, { error: "Invalid device credentials." });
+    }
+
+    const result = await ctx.runQuery(internal.intentScreen.listRecentScreenDays, {
+      deviceId: body.deviceId,
+      deviceSecret: body.deviceSecret,
+      limit: typeof body.limit === "number" ? body.limit : 21,
+    });
+
+    if (!result) {
+      return json(401, { error: "Invalid device credentials." });
+    }
+
+    return json(200, result);
+  } catch (error) {
+    return json(500, {
+      error:
+        error instanceof Error
+          ? error.message
+          : "Failed to load recent screen days.",
     });
   }
 });
