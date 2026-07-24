@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 import urllib.error
@@ -122,6 +123,10 @@ def biome_home_env(biome_dir: Path | None) -> dict[str, str]:
 
 def fetch_events(aw_bin: Path, since_days: int, biome_dir: Path | None) -> list[dict]:
     env = biome_home_env(biome_dir)
+    env["NO_COLOR"] = "1"
+    env["TERM"] = "dumb"
+    env["CLICOLOR"] = "0"
+    env["FORCE_COLOR"] = "0"
     result = subprocess.run(
         [str(aw_bin), "events", "preview", "--since", f"{since_days}d"],
         capture_output=True,
@@ -134,7 +139,18 @@ def fetch_events(aw_bin: Path, since_days: int, biome_dir: Path | None) -> list[
         raise SystemExit(
             f"aw-import-screentime failed ({result.returncode}): {result.stderr[:800]}"
         )
-    payload = json.loads(result.stdout)
+    stdout = result.stdout.strip()
+    # strip ansi color codes if the cli still emits them
+    stdout = re.sub(r"\x1b\[[0-9;]*m", "", stdout)
+    if not stdout:
+        raise SystemExit(
+            f"aw-import-screentime returned empty stdout. stderr={result.stderr[:800]}"
+        )
+    # if logs leaked onto stdout, keep from first json array
+    start = stdout.find("[")
+    if start > 0:
+        stdout = stdout[start:]
+    payload = json.loads(stdout)
     events: list[dict] = []
     for device in payload:
         device_id = device.get("device_id") or "unknown"
