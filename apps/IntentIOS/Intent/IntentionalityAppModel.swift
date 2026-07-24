@@ -8,6 +8,7 @@
 import Combine
 import ConvexMobile
 import Foundation
+import UserNotifications
 
 @MainActor
 final class IntentionalityAppModel: ObservableObject {
@@ -18,6 +19,7 @@ final class IntentionalityAppModel: ObservableObject {
     }
 
     @Published var snapshot: IntentionalitySnapshot?
+    @Published var screenDay: IntentScreenDay?
     @Published var connectionStatus = "Needs setup"
     @Published var lastError: String?
     @Published var lastNotice: String?
@@ -62,6 +64,9 @@ final class IntentionalityAppModel: ObservableObject {
         }
 
         ensureRealtimeConnection(forceReconnect: false)
+        Task { [weak self] in
+            await self?.refreshScreenSummaryAndNotifyIfNeeded()
+        }
     }
 
     func stop() {
@@ -104,6 +109,11 @@ final class IntentionalityAppModel: ObservableObject {
         }
 
         ensureRealtimeConnection(forceReconnect: identityChanged)
+        if (identityChanged || previous.sampleDataEnabled) && next.isPaired {
+            Task { [weak self] in
+                await self?.refreshScreenSummaryAndNotifyIfNeeded()
+            }
+        }
     }
 
     func pair() async {
@@ -147,6 +157,9 @@ final class IntentionalityAppModel: ObservableObject {
             lastNotice = "Paired"
             connectionStatus = "Connecting"
             ensureRealtimeConnection(forceReconnect: true)
+            Task { [weak self] in
+                await self?.refreshScreenSummaryAndNotifyIfNeeded()
+            }
         } catch {
             lastNotice = nil
             lastError = displayMessage(for: error)
@@ -203,6 +216,74 @@ final class IntentionalityAppModel: ObservableObject {
         updateConfiguration { configuration in
             configuration.windowDays = min(180, max(1, days))
         }
+    }
+
+    func refreshScreenSummaryAndNotifyIfNeeded() async {
+        guard configuration.isPaired, !configuration.sampleDataEnabled else {
+            return
+        }
+
+        do {
+            let response: IntentScreenSummaryResponse = try await post(
+                path: "/intent/device/screen/summary",
+                body: IntentScreenSummaryRequest(
+                    deviceId: configuration.deviceId,
+                    deviceSecret: configuration.deviceSecret,
+                    dayKey: nil,
+                    includeHours: true
+                )
+            )
+
+            screenDay = response.day
+            guard let day = response.day else {
+                return
+            }
+
+            if day.notificationDeliveredAt == nil {
+                try await presentScreenSummaryNotification(for: day)
+                let _: IntentScreenAckResponse = try await post(
+                    path: "/intent/device/screen/ack-notification",
+                    body: IntentScreenAckRequest(
+                        deviceId: configuration.deviceId,
+                        deviceSecret: configuration.deviceSecret,
+                        dayKey: day.dayKey,
+                        sourceDeviceId: day.sourceDeviceId
+                    )
+                )
+                screenDay = day.markingNotificationDelivered()
+            }
+        } catch {
+            // screen summary is best-effort; don't stomp intentionality errors
+            if lastError == nil {
+                lastError = displayMessage(for: error)
+            }
+        }
+    }
+
+    private func presentScreenSummaryNotification(for day: IntentScreenDay) async throws {
+        let center = UNUserNotificationCenter.current()
+        let settings = await center.notificationSettings()
+        if settings.authorizationStatus == .notDetermined {
+            let granted = try await center.requestAuthorization(options: [.alert, .sound, .badge])
+            guard granted else {
+                return
+            }
+        } else if settings.authorizationStatus == .denied {
+            return
+        }
+
+        let content = UNMutableNotificationContent()
+        content.title = "iPhone screen time"
+        content.body = day.notificationBody
+        content.sound = .default
+
+        let request = UNNotificationRequest(
+            identifier: "intent.screen.\(day.dayKey).\(day.sourceDeviceId)",
+            content: content,
+            trigger: nil
+        )
+        try await center.add(request)
+        lastNotice = day.notificationBody
     }
 
     private func useSampleData() {

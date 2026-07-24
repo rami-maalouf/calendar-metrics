@@ -158,3 +158,81 @@ struct IntentionalityBestHour: Decodable, Equatable {
     let average: Double
     let count: Int
 }
+
+struct IntentScreenApp: Decodable, Equatable {
+    let bundleId: String
+    let title: String
+    let seconds: Double
+}
+
+struct IntentScreenHour: Decodable, Equatable, Identifiable {
+    let hourOfDay: Int
+    let hourStartMs: Int
+    let totalSeconds: Double
+    let topApps: [IntentScreenApp]
+
+    var id: Int { hourOfDay }
+}
+
+struct IntentScreenDay: Decodable, Equatable {
+    let dayKey: String
+    let source: String
+    let sourceDeviceId: String
+    let platform: String
+    let totalSeconds: Double
+    let eventCount: Int
+    let cleanedEventCount: Int
+    let topApps: [IntentScreenApp]
+    let hourlyTotals: [Double]
+    let hours: [IntentScreenHour]?
+    let notificationBody: String
+    let notificationDeliveredAt: Int?
+    let timeZoneOffsetMinutes: Int
+    let collectedAt: Int
+
+    func markingNotificationDelivered(
+        at timestampMs: Int = Int(Date().timeIntervalSince1970 * 1000)
+    ) -> IntentScreenDay {
+        IntentScreenDay(
+            dayKey: dayKey,
+            source: source,
+            sourceDeviceId: sourceDeviceId,
+            platform: platform,
+            totalSeconds: totalSeconds,
+            eventCount: eventCount,
+            cleanedEventCount: cleanedEventCount,
+            topApps: topApps,
+            hourlyTotals: hourlyTotals,
+            hours: hours,
+            notificationBody: notificationBody,
+            notificationDeliveredAt: timestampMs,
+            timeZoneOffsetMinutes: timeZoneOffsetMinutes,
+            collectedAt: collectedAt
+        )
+    }
+}
+
+struct IntentScreenSummaryResponse: Decodable {
+    let ok: Bool
+    let day: IntentScreenDay?
+}
+
+struct IntentScreenSummaryRequest: Encodable {
+    let deviceId: String
+    let deviceSecret: String
+    let dayKey: String?
+    let includeHours: Bool
+}
+
+struct IntentScreenAckRequest: Encodable {
+    let deviceId: String
+    let deviceSecret: String
+    let dayKey: String
+    let sourceDeviceId: String
+}
+
+struct IntentScreenAckResponse: Decodable {
+    let ok: Bool
+    let dayKey: String?
+    let notificationDeliveredAt: Int?
+}
