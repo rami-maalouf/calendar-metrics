@@ -55,8 +55,8 @@ const TASK_CATEGORIES = ["Engineering", "Strategy", "Design", "Operations", "Res
 const WORK_MODES = ["Deep work", "Collaboration", "Planning", "Review", "Recovery"];
 
 function seededUnit(seed: number) {
-  const value = Math.sin(seed * 12.9898) * 43758.5453;
-  return value - Math.floor(value);
+  void seed;
+  return Math.random();
 }
 
 function choose<T>(items: T[], seed: number): T {
@@ -64,7 +64,11 @@ function choose<T>(items: T[], seed: number): T {
 }
 
 function clampScore(value: number) {
-  return Math.max(1, Math.min(10, Math.round(value * 10) / 10));
+  return Math.max(3, Math.min(7, Math.round(value * 10) / 10));
+}
+
+function randomBetween(min: number, max: number) {
+  return min + Math.random() * (max - min);
 }
 
 function dateKey(date: Date) {
@@ -103,16 +107,21 @@ export function createDemoDashboardData(now = new Date()): DemoDashboardData {
     const date = new Date(todayMs - daysAgo * 86_400_000);
     const dateStr = dateKey(date);
     const weekday = date.getUTCDay();
-    const weekdayBoost = weekday >= 1 && weekday <= 5 ? 0.35 : -0.2;
-    const trend = dayIndex * 0.018;
-    const cadence = Math.sin(dayIndex / 8) * 0.5;
-    const active = daysAgo <= 9 || seededUnit(dayIndex + 3) < (weekday >= 1 && weekday <= 5 ? 0.82 : 0.58);
+    const dayRoll = Math.random();
+    const dayProfile =
+      dayRoll < 0.22
+        ? { base: randomBetween(3.1, 4.2), volatility: randomBetween(0.8, 1.5), activityRate: randomBetween(0.42, 0.68) }
+        : dayRoll < 0.48
+          ? { base: randomBetween(5.8, 6.7), volatility: randomBetween(0.35, 0.9), activityRate: randomBetween(0.75, 0.96) }
+          : { base: randomBetween(4.2, 5.7), volatility: randomBetween(0.5, 1.15), activityRate: randomBetween(0.58, 0.88) };
+    const weekdayActivityLift = weekday >= 1 && weekday <= 5 ? 0.08 : -0.1;
+    const active = daysAgo <= 2 || Math.random() < dayProfile.activityRate + weekdayActivityLift;
     const dayBuckets: Record<string, number[]> = Object.fromEntries(NUMERIC_KEYS.map((key) => [key, []]));
     let sessionCount = 0;
     let totalHours = 0;
 
     if (active) {
-      const subjectCount = 1 + (seededUnit(dayIndex + 21) > 0.72 ? 1 : 0) + (seededUnit(dayIndex + 55) > 0.9 ? 1 : 0);
+      const subjectCount = 1 + (Math.random() > 0.62 ? 1 : 0) + (Math.random() > 0.88 ? 1 : 0);
 
       for (let subjectIndex = 0; subjectIndex < subjectCount; subjectIndex++) {
         const subjectSeed = dayIndex * 17 + subjectIndex * 31;
@@ -124,14 +133,17 @@ export function createDemoDashboardData(now = new Date()): DemoDashboardData {
         const subjectTitle = choose(titlePrefix, subjectSeed + 11);
         const taskCategory = choose(TASK_CATEGORIES, subjectSeed + 12);
         const workMode = choose(WORK_MODES, subjectSeed + 13);
-        const base = 6.15 + weekdayBoost + trend + cadence + (seededUnit(subjectSeed + 14) - 0.5) * 1.4;
-        const focus = clampScore(base + 0.55 + (seededUnit(subjectSeed + 15) - 0.5) * 1.2);
-        const discipline = clampScore(base + 0.1 + (seededUnit(subjectSeed + 16) - 0.5) * 1.1);
-        const energy = clampScore(base + Math.sin(dayIndex / 5) * 0.55 + (seededUnit(subjectSeed + 17) - 0.5));
-        const mindfulness = clampScore(base - 0.35 + (seededUnit(subjectSeed + 18) - 0.5) * 1.5);
-        const intentionality = clampScore(base + 0.25 + (seededUnit(subjectSeed + 19) - 0.5) * 1.1);
-        const purpose = clampScore(base + 0.4 + (seededUnit(subjectSeed + 20) - 0.5) * 1.2);
-        const distractions = clampScore(10.5 - focus + (seededUnit(subjectSeed + 22) - 0.5) * 1.8);
+        const dayNoise = randomBetween(-dayProfile.volatility, dayProfile.volatility);
+        const swing = Math.random() < 0.16 ? randomBetween(-1.5, 1.2) : 0;
+        const hourEffect = hour < 10 ? randomBetween(-0.35, 0.55) : hour < 14 ? randomBetween(-0.7, 0.25) : randomBetween(-0.25, 0.65);
+        const base = dayProfile.base + dayNoise + swing + hourEffect;
+        const focus = clampScore(base + randomBetween(-0.5, 0.8));
+        const discipline = clampScore(base + randomBetween(-0.75, 0.55));
+        const energy = clampScore(base + randomBetween(-0.9, 0.75));
+        const mindfulness = clampScore(base + randomBetween(-0.8, 0.7));
+        const intentionality = clampScore(base + randomBetween(-0.45, 0.65));
+        const purpose = clampScore(base + randomBetween(-0.55, 0.75));
+        const distractions = clampScore(8.4 - focus + randomBetween(-0.9, 1.1));
         const metrics = {
           focus,
           discipline,
