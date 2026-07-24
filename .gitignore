@@ -50,6 +50,10 @@ coverage
 tmp
 temp
 
+# Local Apple KnowledgeC / Screen Time db dumps
+knowledgeC.db
+knowledgeC.db-*
+
 # Xcode
 *.xcuserstate
 xcuserdata/
