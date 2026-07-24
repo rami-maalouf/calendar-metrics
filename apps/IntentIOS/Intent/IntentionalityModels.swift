@@ -258,7 +258,7 @@ struct IntentScreenHour: Decodable, Equatable, Identifiable {
     var id: Int { hourOfDay }
 }
 
-struct IntentScreenDay: Decodable, Equatable {
+struct IntentScreenDay: Decodable, Equatable, Identifiable {
     let dayKey: String
     let source: String
     let sourceDeviceId: String
@@ -273,6 +273,8 @@ struct IntentScreenDay: Decodable, Equatable {
     let notificationDeliveredAt: Int?
     let timeZoneOffsetMinutes: Int
     let collectedAt: Int
+
+    var id: String { "\(dayKey)-\(sourceDeviceId)" }
 
     func markingNotificationDelivered(
         at timestampMs: Int = Int(Date().timeIntervalSince1970 * 1000)

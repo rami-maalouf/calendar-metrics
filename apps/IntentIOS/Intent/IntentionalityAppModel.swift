@@ -303,6 +303,48 @@ final class IntentionalityAppModel: ObservableObject {
         }
     }
 
+    func refreshScreenDashboard(dayKey: String? = nil) async {
+        guard configuration.isPaired, !configuration.sampleDataEnabled else {
+            screenDay = nil
+            screenDays = []
+            return
+        }
+
+        await refreshRecentScreenDays()
+
+        let preferredDayKey =
+            dayKey
+            ?? screenDay?.dayKey
+            ?? screenDays.reversed().first(where: { $0.totalSeconds >= 30 * 60 })?.dayKey
+            ?? screenDays.last?.dayKey
+
+        guard let preferredDayKey else {
+            screenDay = nil
+            return
+        }
+
+        do {
+            let response: IntentScreenSummaryResponse = try await post(
+                path: "/intent/device/screen/summary",
+                body: IntentScreenSummaryRequest(
+                    deviceId: configuration.deviceId,
+                    deviceSecret: configuration.deviceSecret,
+                    dayKey: preferredDayKey,
+                    includeHours: true
+                )
+            )
+            screenDay = response.day
+        } catch {
+            if lastError == nil {
+                lastError = displayMessage(for: error)
+            }
+        }
+    }
+
+    func selectScreenDay(_ dayKey: String) async {
+        await refreshScreenDashboard(dayKey: dayKey)
+    }
+
     private func presentScreenSummaryNotification(for day: IntentScreenDay) async throws {
         guard await ensureNotificationAuthorization() else {
             return

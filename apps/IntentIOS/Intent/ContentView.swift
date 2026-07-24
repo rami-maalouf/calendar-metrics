@@ -11,8 +11,8 @@ import SwiftUI
 private enum IntentTab: String, Hashable {
     case home
     case trends
+    case screen
     case settings
-    case record
 }
 
 struct ContentView: View {
@@ -22,19 +22,8 @@ struct ContentView: View {
     @State private var showingManualEntry = false
 
     var body: some View {
-        TabView(
-            selection: Binding(
-                get: { selectedTab },
-                set: { nextTab in
-                    if nextTab == .record {
-                        showingManualEntry = true
-                    } else {
-                        selectedTab = nextTab
-                    }
-                }
-            )
-        ) {
-            IntentionalityHomeView(model: model)
+        TabView(selection: $selectedTab) {
+            IntentionalityHomeView(model: model, showingManualEntry: $showingManualEntry)
                 .tag(IntentTab.home)
                 .tabItem {
                     Label("Home", systemImage: "house.fill")
@@ -46,16 +35,16 @@ struct ContentView: View {
                     Label("Trends", systemImage: "chart.xyaxis.line")
                 }
 
+            IntentScreenTimeView(model: model)
+                .tag(IntentTab.screen)
+                .tabItem {
+                    Label("Screen", systemImage: "iphone")
+                }
+
             IntentionalitySettingsView(model: model)
                 .tag(IntentTab.settings)
                 .tabItem {
                     Label("Settings", systemImage: "gearshape.fill")
-                }
-
-            Color.clear
-                .tag(IntentTab.record)
-                .tabItem {
-                    Label("Record", systemImage: "plus.circle.fill")
                 }
         }
         .tint(IntentTheme.accent)
@@ -79,12 +68,13 @@ struct ContentView: View {
 
 private struct IntentionalityHomeView: View {
     @ObservedObject var model: IntentionalityAppModel
+    @Binding var showingManualEntry: Bool
 
     var body: some View {
         IntentScreenBackground {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    HeaderView(model: model)
+                    HeaderView(showingManualEntry: $showingManualEntry)
 
                     if !model.isPaired && !model.configuration.sampleDataEnabled {
                         PairingPrompt()
@@ -100,10 +90,6 @@ private struct IntentionalityHomeView: View {
                     } else {
                         LoadingPanel(isPaired: model.isPaired)
                     }
-
-                    if let screenDay = model.screenDay {
-                        ScreenTimeHomeSection(day: screenDay, recentDays: model.screenDays)
-                    }
                 }
                 .padding(.horizontal, 18)
                 .padding(.top, 14)
@@ -111,160 +97,6 @@ private struct IntentionalityHomeView: View {
             }
         }
     }
-}
-
-private struct ScreenTimeHomeSection: View {
-    let day: IntentScreenDay
-    let recentDays: [IntentScreenDay]
-
-    private var hourlyPoints: [(hour: Int, hours: Double)] {
-        day.hourlyTotals.enumerated().map { index, seconds in
-            (hour: index, hours: seconds / 3600.0)
-        }
-    }
-
-    private var trendPoints: [(dayKey: String, hours: Double)] {
-        recentDays.suffix(14).map { row in
-            (dayKey: row.dayKey, hours: row.totalSeconds / 3600.0)
-        }
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            IntentPanel(padding: 18) {
-                VStack(alignment: .leading, spacing: 14) {
-                    HStack(alignment: .firstTextBaseline) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("iPhone Screen")
-                                .font(.headline)
-                                .foregroundStyle(IntentTheme.textPrimary)
-                            Text(day.dayKey)
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(IntentTheme.textSecondary)
-                        }
-
-                        Spacer()
-
-                        Text(screenDurationLabel(day.totalSeconds))
-                            .font(.system(size: 34, weight: .black, design: .rounded))
-                            .foregroundStyle(IntentTheme.amber)
-                            .monospacedDigit()
-                    }
-
-                    if !day.topApps.isEmpty {
-                        VStack(alignment: .leading, spacing: 8) {
-                            ForEach(Array(day.topApps.prefix(5).enumerated()), id: \.element.bundleId) { index, app in
-                                HStack(spacing: 10) {
-                                    Text("\(index + 1)")
-                                        .font(.caption.weight(.bold))
-                                        .foregroundStyle(IntentTheme.textSecondary)
-                                        .frame(width: 16, alignment: .leading)
-
-                                    Text(app.title)
-                                        .font(.subheadline.weight(.semibold))
-                                        .foregroundStyle(IntentTheme.textPrimary)
-                                        .lineLimit(1)
-
-                                    Spacer(minLength: 8)
-
-                                    Text(screenDurationLabel(app.seconds))
-                                        .font(.subheadline.weight(.bold))
-                                        .foregroundStyle(IntentTheme.amber)
-                                        .monospacedDigit()
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            ChartCard(title: "Hourly Screen Time", subtitle: "local hours for \(day.dayKey)") {
-                Chart {
-                    ForEach(hourlyPoints, id: \.hour) { point in
-                        BarMark(
-                            x: .value("Hour", point.hour),
-                            y: .value("Hours", point.hours)
-                        )
-                        .foregroundStyle(IntentTheme.amber.gradient)
-                        .cornerRadius(3)
-                    }
-                }
-                .chartXScale(domain: 0...23)
-                .chartXAxis {
-                    AxisMarks(values: [0, 6, 12, 18, 23]) { value in
-                        AxisGridLine()
-                        AxisValueLabel {
-                            if let hour = value.as(Int.self) {
-                                Text(String(format: "%02d", hour))
-                            }
-                        }
-                    }
-                }
-                .chartYAxis {
-                    AxisMarks(position: .leading) { value in
-                        AxisGridLine()
-                        AxisValueLabel {
-                            if let hours = value.as(Double.self) {
-                                Text(hours < 1 ? String(format: "%.0fm", hours * 60) : String(format: "%.1fh", hours))
-                            }
-                        }
-                    }
-                }
-                .frame(height: 180)
-            }
-
-            if trendPoints.count >= 2 {
-                ChartCard(title: "Screen Trend", subtitle: "last \(trendPoints.count) days") {
-                    Chart {
-                        ForEach(Array(trendPoints.enumerated()), id: \.offset) { _, point in
-                            AreaMark(
-                                x: .value("Day", point.dayKey),
-                                y: .value("Hours", point.hours)
-                            )
-                            .foregroundStyle(IntentTheme.amber.opacity(0.18).gradient)
-                            .interpolationMethod(.catmullRom)
-
-                            LineMark(
-                                x: .value("Day", point.dayKey),
-                                y: .value("Hours", point.hours)
-                            )
-                            .foregroundStyle(IntentTheme.amber)
-                            .interpolationMethod(.catmullRom)
-                            .lineStyle(StrokeStyle(lineWidth: 2.5))
-
-                            PointMark(
-                                x: .value("Day", point.dayKey),
-                                y: .value("Hours", point.hours)
-                            )
-                            .foregroundStyle(IntentTheme.amber)
-                            .symbolSize(28)
-                        }
-                    }
-                    .chartXAxis {
-                        AxisMarks(values: .automatic(desiredCount: 4)) { _ in
-                            AxisValueLabel(collisionResolution: .greedy)
-                        }
-                    }
-                    .frame(height: 170)
-                }
-            }
-        }
-    }
-}
-
-private func screenDurationLabel(_ seconds: Double) -> String {
-    let totalMinutes = Int((seconds / 60.0).rounded())
-    if totalMinutes < 60 {
-        return "\(max(totalMinutes, 0))m"
-    }
-    let hours = Double(totalMinutes) / 60.0
-    if hours >= 10 {
-        return String(format: "%.0fh", hours)
-    }
-    if totalMinutes % 60 == 0 {
-        return String(format: "%.0fh", hours)
-    }
-    return String(format: "%.1fh", hours)
 }
 
 private struct IntentionalityTrendsView: View {
@@ -472,7 +304,7 @@ private func screenNotificationDayRuleCopy(for configuration: IntentConfiguratio
     return "PM times summarize the same day as the notification."
 }
 
-private struct IntentScreenBackground<Content: View>: View {
+struct IntentScreenBackground<Content: View>: View {
     @ViewBuilder let content: () -> Content
 
     var body: some View {
@@ -490,23 +322,31 @@ private struct IntentScreenBackground<Content: View>: View {
 }
 
 private struct HeaderView: View {
-    @ObservedObject var model: IntentionalityAppModel
+    @Binding var showingManualEntry: Bool
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Intent")
-                    .font(.system(size: 42, weight: .black, design: .rounded))
-                    .foregroundStyle(IntentTheme.textPrimary)
+        HStack {
+            Spacer(minLength: 0)
 
-                Text(Date(), format: .dateTime.weekday(.wide).month(.abbreviated).day())
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(IntentTheme.textSecondary)
+            Button {
+                showingManualEntry = true
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "plus.circle.fill")
+                        .font(.system(size: 16, weight: .semibold))
+                    Text("Record")
+                        .font(.subheadline.weight(.bold))
+                }
+                .foregroundStyle(IntentTheme.textPrimary)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(IntentTheme.accent.opacity(0.22), in: Capsule())
+                .overlay(
+                    Capsule()
+                        .stroke(IntentTheme.accent.opacity(0.55), lineWidth: 1)
+                )
             }
-
-            Spacer(minLength: 10)
-
-            StatusPill(text: model.connectionStatus)
+            .buttonStyle(.plain)
         }
     }
 }
@@ -1763,7 +1603,7 @@ private struct RecentEntriesList: View {
     }
 }
 
-private struct PairingPrompt: View {
+struct PairingPrompt: View {
     var body: some View {
         IntentPanel {
             HStack(alignment: .top, spacing: 12) {
@@ -1784,7 +1624,7 @@ private struct PairingPrompt: View {
     }
 }
 
-private struct LoadingPanel: View {
+struct LoadingPanel: View {
     let isPaired: Bool
 
     var body: some View {
