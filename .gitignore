@@ -50,9 +50,15 @@ coverage
 tmp
 temp
 
-# Local Apple KnowledgeC / Screen Time db dumps
+# Local Apple KnowledgeC / Screen Time / Biome dumps
 knowledgeC.db
 knowledgeC.db-*
+Biome/
+
+# screen-time collector secrets / logs / venv
+scripts/screen-time/.env
+scripts/screen-time/logs/
+scripts/screen-time/.venv/
 
 # Xcode
 *.xcuserstate
