@@ -21,6 +21,8 @@ final class IntentionalityAppModel: ObservableObject {
     @Published var snapshot: IntentionalitySnapshot?
     @Published var screenDay: IntentScreenDay?
     @Published var screenDays: [IntentScreenDay] = []
+    /// explicit Screen-tab selection; notification refresh must not clobber this
+    @Published var selectedScreenDayKey: String?
     @Published var connectionStatus = "Needs setup"
     @Published var lastError: String?
     @Published var lastNotice: String?
@@ -244,8 +246,13 @@ final class IntentionalityAppModel: ObservableObject {
                 )
             )
 
-            screenDay = response.day
             await refreshRecentScreenDays()
+
+            // only adopt notification day when the user has not picked one on Screen
+            if selectedScreenDayKey == nil, let day = response.day {
+                screenDay = day
+            }
+
             guard let day = response.day else {
                 await scheduleNextScreenNotificationReminder()
                 return
@@ -262,7 +269,9 @@ final class IntentionalityAppModel: ObservableObject {
                         sourceDeviceId: day.sourceDeviceId
                     )
                 )
-                screenDay = day.markingNotificationDelivered()
+                if selectedScreenDayKey == nil || selectedScreenDayKey == day.dayKey {
+                    screenDay = day.markingNotificationDelivered()
+                }
             }
 
             await scheduleNextScreenNotificationReminder()
@@ -287,17 +296,10 @@ final class IntentionalityAppModel: ObservableObject {
                 body: IntentScreenRecentRequest(
                     deviceId: configuration.deviceId,
                     deviceSecret: configuration.deviceSecret,
-                    limit: min(90, max(7, configuration.windowDays))
+                    limit: 90
                 )
             )
             screenDays = response.days.sorted { $0.dayKey < $1.dayKey }
-            if screenDay == nil || (screenDay?.totalSeconds ?? 0) < 30 * 60 {
-                if let preferred = screenDays.reversed().first(where: { $0.totalSeconds >= 30 * 60 }) {
-                    screenDay = preferred
-                } else {
-                    screenDay = screenDays.last
-                }
-            }
         } catch {
             // best-effort history for charts
         }
@@ -307,6 +309,7 @@ final class IntentionalityAppModel: ObservableObject {
         guard configuration.isPaired, !configuration.sampleDataEnabled else {
             screenDay = nil
             screenDays = []
+            selectedScreenDayKey = nil
             return
         }
 
@@ -314,6 +317,7 @@ final class IntentionalityAppModel: ObservableObject {
 
         let preferredDayKey =
             dayKey
+            ?? selectedScreenDayKey
             ?? screenDay?.dayKey
             ?? screenDays.reversed().first(where: { $0.totalSeconds >= 30 * 60 })?.dayKey
             ?? screenDays.last?.dayKey
@@ -321,6 +325,10 @@ final class IntentionalityAppModel: ObservableObject {
         guard let preferredDayKey else {
             screenDay = nil
             return
+        }
+
+        if let dayKey {
+            selectedScreenDayKey = dayKey
         }
 
         do {
@@ -333,7 +341,12 @@ final class IntentionalityAppModel: ObservableObject {
                     includeHours: true
                 )
             )
-            screenDay = response.day
+            if let day = response.day {
+                screenDay = day
+            } else if screenDay?.dayKey != preferredDayKey {
+                // keep a recent stub so the picker stays usable
+                screenDay = screenDays.first(where: { $0.dayKey == preferredDayKey }) ?? screenDays.last
+            }
         } catch {
             if lastError == nil {
                 lastError = displayMessage(for: error)
@@ -342,7 +355,27 @@ final class IntentionalityAppModel: ObservableObject {
     }
 
     func selectScreenDay(_ dayKey: String) async {
-        await refreshScreenDashboard(dayKey: dayKey)
+        selectedScreenDayKey = dayKey
+        do {
+            let response: IntentScreenSummaryResponse = try await post(
+                path: "/intent/device/screen/summary",
+                body: IntentScreenSummaryRequest(
+                    deviceId: configuration.deviceId,
+                    deviceSecret: configuration.deviceSecret,
+                    dayKey: dayKey,
+                    includeHours: true
+                )
+            )
+            if let day = response.day {
+                screenDay = day
+            } else {
+                screenDay = screenDays.first(where: { $0.dayKey == dayKey })
+            }
+        } catch {
+            if lastError == nil {
+                lastError = displayMessage(for: error)
+            }
+        }
     }
 
     private func presentScreenSummaryNotification(for day: IntentScreenDay) async throws {

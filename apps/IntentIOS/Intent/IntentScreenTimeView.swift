@@ -39,8 +39,24 @@ struct IntentScreenTimeView: View {
                             trendChart
                             weekdayChart
                         }
+                    } else if !days.isEmpty {
+                        dayPicker
+                        IntentPanel {
+                            Text("Select a day to load its breakdown.")
+                                .font(.subheadline)
+                                .foregroundStyle(IntentTheme.textSecondary)
+                        }
                     } else if model.isPaired {
-                        LoadingPanel(isPaired: true)
+                        IntentPanel {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("No iPhone screen data yet")
+                                    .font(.headline)
+                                    .foregroundStyle(IntentTheme.textPrimary)
+                                Text("Pull to refresh after the Mac collector runs.")
+                                    .font(.subheadline)
+                                    .foregroundStyle(IntentTheme.textSecondary)
+                            }
+                        }
                     } else {
                         PairingPrompt()
                     }
@@ -177,8 +193,8 @@ struct IntentScreenTimeView: View {
             )
             MetricTile(
                 title: "Apps Used",
-                value: "\(max(day.topApps.count, day.eventCount > 0 ? day.cleanedEventCount : 0))",
-                caption: "tracked in this day rollup",
+                value: "\(day.topApps.count)",
+                caption: "in today's top rollup",
                 systemImage: "app.badge.fill",
                 tint: IntentTheme.mint
             )
