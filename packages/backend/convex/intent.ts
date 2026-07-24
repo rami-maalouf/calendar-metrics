@@ -483,6 +483,7 @@ async function buildIntentionalitySnapshot(
     .filter((entry) => entry.hourStartMs >= timestamp - DAY_MS)
     .map((entry) => entry.score);
   const currentHourStart = hourStart(timestamp);
+  const comparisonWindowStart = currentHourStart - 95 * HOUR_MS;
   const currentHourScore =
     [...entries].reverse().find((entry) => entry.hourStartMs === currentHourStart)
       ?.score ?? null;
@@ -512,7 +513,7 @@ async function buildIntentionalitySnapshot(
 
   const dailyAverages = [...dailyStats.values()]
     .sort((left, right) => left.dayStartMs - right.dayStartMs)
-    .slice(-21)
+    .slice(-windowDays)
     .map((day) => ({
       id: day.dayKey,
       dayKey: day.dayKey,
@@ -589,7 +590,9 @@ async function buildIntentionalitySnapshot(
     ),
     responseRate7d,
     bestHourOfDay,
-    recentEntries: [...entries].reverse().slice(0, 72),
+    recentEntries: [...entries]
+      .filter((entry) => entry.hourStartMs >= comparisonWindowStart)
+      .reverse(),
     dailyAverages,
     hourlyAverages,
     lastRecordedAt: entries[entries.length - 1]?.hourStartMs ?? null,
@@ -1508,9 +1511,11 @@ export const getDeviceDashboardState = internalQuery({
 export const getDeviceMetricsState = internalQuery({
   args: {
     windowDays: v.optional(v.number()),
+    timeZoneOffsetMinutes: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const timestamp = now();
+    const timeZoneOffsetMinutes = args.timeZoneOffsetMinutes ?? 0;
     const windowDays = clampMetricsWindowDays(args.windowDays);
     const cutoffTime = timestamp - windowDays * 24 * 60 * 60 * 1000;
 
@@ -1575,6 +1580,54 @@ export const getDeviceMetricsState = internalQuery({
         categoryCounts.set(normalized, (categoryCounts.get(normalized) ?? 0) + 1);
       }
     }
+
+    // per-local-day buckets across the whole window: numeric keys average, count keys sum
+    const dailySignalBuckets = new Map<number, Map<string, number[]>>();
+    for (const observation of observations) {
+      if (observation.valueType !== "number" || typeof observation.numberValue !== "number") {
+        continue;
+      }
+      const dayStart = localDayStartMs(observation.observedAt, timeZoneOffsetMinutes);
+      const dayBucket = dailySignalBuckets.get(dayStart) ?? new Map<string, number[]>();
+      const values = dayBucket.get(observation.key) ?? [];
+      values.push(observation.numberValue);
+      dayBucket.set(observation.key, values);
+      dailySignalBuckets.set(dayStart, dayBucket);
+    }
+
+    const signalDailySeries = [...dailySignalBuckets.entries()]
+      .sort((left, right) => left[0] - right[0])
+      .map(([dayStart, dayBucket]) => ({
+        id: String(dayStart),
+        dayStart,
+        metrics: Object.fromEntries(
+          [...dayBucket.entries()].map(([key, values]) => [
+            key,
+            INTENT_COUNT_METRIC_KEYS.has(key)
+              ? roundMetric(values.reduce((sum, value) => sum + value, 0))
+              : roundMetric(averageOf(values)),
+          ]),
+        ),
+      }));
+
+    // per-local-day deep work totals from completed sessions across the whole window
+    const dailyDurationBuckets = new Map<number, { durationMs: number; sessionCount: number }>();
+    for (const session of relevantCompletedSessions) {
+      const dayStart = localDayStartMs(session.startTimeMs, timeZoneOffsetMinutes);
+      const bucket = dailyDurationBuckets.get(dayStart) ?? { durationMs: 0, sessionCount: 0 };
+      bucket.durationMs += sessionDurationMs(session);
+      bucket.sessionCount += 1;
+      dailyDurationBuckets.set(dayStart, bucket);
+    }
+
+    const dailyDurationSeries = [...dailyDurationBuckets.entries()]
+      .sort((left, right) => left[0] - right[0])
+      .map(([dayStart, bucket]) => ({
+        id: String(dayStart),
+        dayStart,
+        durationMs: bucket.durationMs,
+        sessionCount: bucket.sessionCount,
+      }));
 
     const signalAverages = [...signalBuckets.entries()]
       .filter(([key]) => !INTENT_COUNT_METRIC_KEYS.has(key))
@@ -1769,6 +1822,8 @@ export const getDeviceMetricsState = internalQuery({
         relevantReviewedSessions.map((session) => observedDayKey(session.startTimeMs)),
       ),
       signalAverages,
+      signalDailySeries,
+      dailyDurationSeries,
       categoryBreakdown,
       trendSeries,
       dailyVolume,

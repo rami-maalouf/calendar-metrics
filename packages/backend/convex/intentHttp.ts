@@ -19,6 +19,7 @@ type DeviceAuthBody = {
 
 type DeviceMetricsBody = DeviceAuthBody & {
   windowDays?: number;
+  timeZoneOffsetMinutes?: number;
 };
 
 type DeviceDailyReportBody = DeviceAuthBody & {
@@ -752,6 +753,7 @@ export const deviceMetrics = httpAction(async (ctx, request) => {
 
     const state = await ctx.runQuery(internal.intent.getDeviceMetricsState, {
       windowDays: body?.windowDays,
+      timeZoneOffsetMinutes: body?.timeZoneOffsetMinutes,
     });
 
     return json(200, {
