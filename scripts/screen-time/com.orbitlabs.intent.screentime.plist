@@ -4,10 +4,13 @@
 <dict>
 	<key>Label</key>
 	<string>studio.orbitlabs.intent.screentime</string>
+	<!-- install under ~/Library/LaunchAgents and point ProgramArguments at
+	     ~/.mac-automations/intent-screentime/run_collect.zsh (outside Documents).
+	     Documents paths get Operation not permitted under launchd TCC. -->
 	<key>ProgramArguments</key>
 	<array>
-		<string>/bin/bash</string>
-		<string>REPLACE_WITH_ABS_PATH/scripts/screen-time/run_collect.sh</string>
+		<string>/bin/zsh</string>
+		<string>REPLACE_WITH_HOME/.mac-automations/intent-screentime/run_collect.zsh</string>
 	</array>
 	<key>StartCalendarInterval</key>
 	<dict>
@@ -19,8 +22,8 @@
 	<key>RunAtLoad</key>
 	<false/>
 	<key>StandardOutPath</key>
-	<string>REPLACE_WITH_ABS_PATH/scripts/screen-time/logs/launchd.out</string>
+	<string>REPLACE_WITH_HOME/Library/Logs/IntentScreenTime/launchd.out.log</string>
 	<key>StandardErrorPath</key>
-	<string>REPLACE_WITH_ABS_PATH/scripts/screen-time/logs/launchd.err</string>
+	<string>REPLACE_WITH_HOME/Library/Logs/IntentScreenTime/launchd.err.log</string>
 </dict>
 </plist>

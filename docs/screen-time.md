@@ -58,13 +58,21 @@ python3 collect_iphone_screentime.py
 
 ### 6. launchd (morning)
 
-Edit `com.orbitlabs.intent.screentime.plist`, replace `REPLACE_WITH_ABS_PATH`, then:
+The LaunchAgent cannot reliably execute scripts living under `Documents`
+(TCC returns `Operation not permitted`). Install the wrapper outside Documents:
 
 ```bash
-cp com.orbitlabs.intent.screentime.plist ~/Library/LaunchAgents/studio.orbitlabs.intent.screentime.plist
-launchctl load ~/Library/LaunchAgents/studio.orbitlabs.intent.screentime.plist
+mkdir -p ~/.mac-automations/intent-screentime ~/Library/Logs/IntentScreenTime
+# wrapper should cd into the repo scripts/screen-time and run run_collect.sh
+# then install plist with REPLACE_WITH_HOME substituted for $HOME:
+cp scripts/screen-time/com.orbitlabs.intent.screentime.plist \
+  ~/Library/LaunchAgents/studio.orbitlabs.intent.screentime.plist
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/studio.orbitlabs.intent.screentime.plist
 ```
 
+Grant **Full Disk Access** to `/bin/zsh` (and Terminal) so live `~/Library/Biome` is readable when launchd runs.
+
+Default schedule: **08:05** local time (collector defaults to yesterday).
 ## HTTP API
 
 All require `deviceId` + `deviceSecret`.
