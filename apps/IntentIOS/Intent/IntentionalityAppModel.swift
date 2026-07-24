@@ -20,6 +20,7 @@ final class IntentionalityAppModel: ObservableObject {
 
     @Published var snapshot: IntentionalitySnapshot?
     @Published var screenDay: IntentScreenDay?
+    @Published var screenDays: [IntentScreenDay] = []
     @Published var connectionStatus = "Needs setup"
     @Published var lastError: String?
     @Published var lastNotice: String?
@@ -91,6 +92,10 @@ final class IntentionalityAppModel: ObservableObject {
             previous.deviceSecret != next.deviceSecret ||
             previous.windowDays != next.windowDays
 
+        let screenNotificationTimingChanged =
+            previous.screenNotificationHour != next.screenNotificationHour
+            || previous.screenNotificationMinute != next.screenNotificationMinute
+
         if next.sampleDataEnabled {
             useSampleData()
             return
@@ -109,7 +114,9 @@ final class IntentionalityAppModel: ObservableObject {
         }
 
         ensureRealtimeConnection(forceReconnect: identityChanged)
-        if (identityChanged || previous.sampleDataEnabled) && next.isPaired {
+        if (identityChanged || previous.sampleDataEnabled || screenNotificationTimingChanged)
+            && next.isPaired
+        {
             Task { [weak self] in
                 await self?.refreshScreenSummaryAndNotifyIfNeeded()
             }
@@ -223,19 +230,24 @@ final class IntentionalityAppModel: ObservableObject {
             return
         }
 
+        let fire = configuration.mostRecentScreenNotificationFire()
+        let dayKey = configuration.screenSummaryDayKey(forFire: fire)
+
         do {
             let response: IntentScreenSummaryResponse = try await post(
                 path: "/intent/device/screen/summary",
                 body: IntentScreenSummaryRequest(
                     deviceId: configuration.deviceId,
                     deviceSecret: configuration.deviceSecret,
-                    dayKey: nil,
+                    dayKey: dayKey,
                     includeHours: true
                 )
             )
 
             screenDay = response.day
+            await refreshRecentScreenDays()
             guard let day = response.day else {
+                await scheduleNextScreenNotificationReminder()
                 return
             }
 
@@ -252,23 +264,60 @@ final class IntentionalityAppModel: ObservableObject {
                 )
                 screenDay = day.markingNotificationDelivered()
             }
+
+            await scheduleNextScreenNotificationReminder()
         } catch {
             // screen summary is best-effort; don't stomp intentionality errors
             if lastError == nil {
                 lastError = displayMessage(for: error)
             }
+            await scheduleNextScreenNotificationReminder()
+        }
+    }
+
+    private func refreshRecentScreenDays() async {
+        guard configuration.isPaired, !configuration.sampleDataEnabled else {
+            screenDays = []
+            return
+        }
+
+        do {
+            let response: IntentScreenRecentResponse = try await post(
+                path: "/intent/device/screen/recent",
+                body: IntentScreenRecentRequest(
+                    deviceId: configuration.deviceId,
+                    deviceSecret: configuration.deviceSecret,
+                    limit: min(90, max(7, configuration.windowDays))
+                )
+            )
+            screenDays = response.days.sorted { $0.dayKey < $1.dayKey }
+            if screenDay == nil || (screenDay?.totalSeconds ?? 0) < 30 * 60 {
+                if let preferred = screenDays.reversed().first(where: { $0.totalSeconds >= 30 * 60 }) {
+                    screenDay = preferred
+                } else {
+                    screenDay = screenDays.last
+                }
+            }
+        } catch {
+            // best-effort history for charts
         }
     }
 
     private func presentScreenSummaryNotification(for day: IntentScreenDay) async throws {
+        guard await ensureNotificationAuthorization() else {
+            return
+        }
+
         let center = UNUserNotificationCenter.current()
-        let settings = await center.notificationSettings()
-        if settings.authorizationStatus == .notDetermined {
-            let granted = try await center.requestAuthorization(options: [.alert, .sound, .badge])
-            guard granted else {
-                return
-            }
-        } else if settings.authorizationStatus == .denied {
+        let identifier = "intent.screen.\(day.dayKey).\(day.sourceDeviceId)"
+        let delivered = await center.deliveredNotifications()
+        let alreadyShown = delivered.contains { notification in
+            notification.request.identifier == identifier
+                || notification.request.identifier == Self.screenReminderIdentifier
+        }
+
+        lastNotice = day.notificationBody
+        guard !alreadyShown else {
             return
         }
 
@@ -278,13 +327,57 @@ final class IntentionalityAppModel: ObservableObject {
         content.sound = .default
 
         let request = UNNotificationRequest(
-            identifier: "intent.screen.\(day.dayKey).\(day.sourceDeviceId)",
+            identifier: identifier,
             content: content,
             trigger: nil
         )
         try await center.add(request)
-        lastNotice = day.notificationBody
     }
+
+    private func ensureNotificationAuthorization() async -> Bool {
+        let center = UNUserNotificationCenter.current()
+        let settings = await center.notificationSettings()
+        switch settings.authorizationStatus {
+        case .authorized, .provisional, .ephemeral:
+            return true
+        case .notDetermined:
+            return (try? await center.requestAuthorization(options: [.alert, .sound, .badge])) ?? false
+        default:
+            return false
+        }
+    }
+
+    private func scheduleNextScreenNotificationReminder() async {
+        guard await ensureNotificationAuthorization() else {
+            return
+        }
+
+        let center = UNUserNotificationCenter.current()
+        center.removePendingNotificationRequests(withIdentifiers: [Self.screenReminderIdentifier])
+
+        let nextFire = configuration.nextScreenNotificationFire()
+        let dayKey = configuration.screenSummaryDayKey(forFire: nextFire)
+        var components = Calendar.current.dateComponents(
+            [.year, .month, .day, .hour, .minute],
+            from: nextFire
+        )
+        components.second = 0
+
+        let content = UNMutableNotificationContent()
+        content.title = "iPhone screen time"
+        content.body = "Your \(dayKey) screen summary is ready. Open Intent to see it."
+        content.sound = .default
+
+        let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
+        let request = UNNotificationRequest(
+            identifier: Self.screenReminderIdentifier,
+            content: content,
+            trigger: trigger
+        )
+        try? await center.add(request)
+    }
+
+    private static let screenReminderIdentifier = "intent.screen.daily.reminder"
 
     private func useSampleData() {
         stop()

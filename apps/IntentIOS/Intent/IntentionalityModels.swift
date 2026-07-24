@@ -16,6 +16,10 @@ struct IntentConfiguration: Codable, Equatable {
     var deviceSecret = ""
     var windowDays = 30
     var sampleDataEnabled = false
+    /// local hour (0-23) when the daily screen summary notification should fire. default midnight.
+    var screenNotificationHour = 0
+    /// local minute (0-59) for the screen summary notification.
+    var screenNotificationMinute = 0
 
     enum CodingKeys: String, CodingKey {
         case backendBaseURL
@@ -25,6 +29,8 @@ struct IntentConfiguration: Codable, Equatable {
         case deviceSecret
         case windowDays
         case sampleDataEnabled
+        case screenNotificationHour
+        case screenNotificationMinute
     }
 
     init() {}
@@ -38,11 +44,89 @@ struct IntentConfiguration: Codable, Equatable {
         deviceSecret = try container.decodeIfPresent(String.self, forKey: .deviceSecret) ?? ""
         windowDays = try container.decodeIfPresent(Int.self, forKey: .windowDays) ?? 30
         sampleDataEnabled = try container.decodeIfPresent(Bool.self, forKey: .sampleDataEnabled) ?? false
+        screenNotificationHour = min(
+            23,
+            max(0, try container.decodeIfPresent(Int.self, forKey: .screenNotificationHour) ?? 0)
+        )
+        screenNotificationMinute = min(
+            59,
+            max(0, try container.decodeIfPresent(Int.self, forKey: .screenNotificationMinute) ?? 0)
+        )
     }
 
     var isPaired: Bool {
         !backendBaseURL.isEmpty && !deviceId.isEmpty && !deviceSecret.isEmpty
     }
+
+    /// am times (before noon) summarize the previous calendar day; pm times summarize the fire's calendar day.
+    var screenNotificationUsesPreviousDay: Bool {
+        screenNotificationHour < 12
+    }
+
+    var screenNotificationTimeDate: Date {
+        var components = Calendar.current.dateComponents([.year, .month, .day], from: Date())
+        components.hour = screenNotificationHour
+        components.minute = screenNotificationMinute
+        components.second = 0
+        return Calendar.current.date(from: components) ?? Date()
+    }
+
+    mutating func setScreenNotificationTime(from date: Date) {
+        let components = Calendar.current.dateComponents([.hour, .minute], from: date)
+        screenNotificationHour = min(23, max(0, components.hour ?? 0))
+        screenNotificationMinute = min(59, max(0, components.minute ?? 0))
+    }
+
+    func mostRecentScreenNotificationFire(
+        now: Date = Date(),
+        calendar: Calendar = .current
+    ) -> Date {
+        var components = calendar.dateComponents([.year, .month, .day], from: now)
+        components.hour = screenNotificationHour
+        components.minute = screenNotificationMinute
+        components.second = 0
+        let todayFire = calendar.date(from: components) ?? now
+        if now >= todayFire {
+            return todayFire
+        }
+        return calendar.date(byAdding: .day, value: -1, to: todayFire) ?? todayFire
+    }
+
+    func nextScreenNotificationFire(
+        after now: Date = Date(),
+        calendar: Calendar = .current
+    ) -> Date {
+        var components = calendar.dateComponents([.year, .month, .day], from: now)
+        components.hour = screenNotificationHour
+        components.minute = screenNotificationMinute
+        components.second = 0
+        let todayFire = calendar.date(from: components) ?? now
+        if now < todayFire {
+            return todayFire
+        }
+        return calendar.date(byAdding: .day, value: 1, to: todayFire) ?? todayFire
+    }
+
+    func screenSummaryDayKey(
+        forFire fire: Date,
+        calendar: Calendar = .current
+    ) -> String {
+        let fireDay = calendar.startOfDay(for: fire)
+        let targetDay =
+            screenNotificationUsesPreviousDay
+            ? (calendar.date(byAdding: .day, value: -1, to: fireDay) ?? fireDay)
+            : fireDay
+        return Self.dayKeyFormatter.string(from: targetDay)
+    }
+
+    private static let dayKeyFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone.current
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter
+    }()
 
     static let storageKey = "intent.ios.configuration"
 
@@ -217,11 +301,22 @@ struct IntentScreenSummaryResponse: Decodable {
     let day: IntentScreenDay?
 }
 
+struct IntentScreenRecentResponse: Decodable {
+    let ok: Bool
+    let days: [IntentScreenDay]
+}
+
 struct IntentScreenSummaryRequest: Encodable {
     let deviceId: String
     let deviceSecret: String
     let dayKey: String?
     let includeHours: Bool
+}
+
+struct IntentScreenRecentRequest: Encodable {
+    let deviceId: String
+    let deviceSecret: String
+    let limit: Int
 }
 
 struct IntentScreenAckRequest: Encodable {

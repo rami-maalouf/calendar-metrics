@@ -17,6 +17,7 @@ private enum IntentTab: String, Hashable {
 
 struct ContentView: View {
     @ObservedObject var model: IntentionalityAppModel
+    @Environment(\.scenePhase) private var scenePhase
     @State private var selectedTab: IntentTab = .home
     @State private var showingManualEntry = false
 
@@ -61,6 +62,13 @@ struct ContentView: View {
         .onAppear {
             model.start()
         }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active {
+                Task {
+                    await model.refreshScreenSummaryAndNotifyIfNeeded()
+                }
+            }
+        }
         .sheet(isPresented: $showingManualEntry) {
             ManualEntrySheet(model: model)
                 .presentationDetents([.height(310), .medium])
@@ -92,6 +100,10 @@ private struct IntentionalityHomeView: View {
                     } else {
                         LoadingPanel(isPaired: model.isPaired)
                     }
+
+                    if let screenDay = model.screenDay {
+                        ScreenTimeHomeSection(day: screenDay, recentDays: model.screenDays)
+                    }
                 }
                 .padding(.horizontal, 18)
                 .padding(.top, 14)
@@ -99,6 +111,160 @@ private struct IntentionalityHomeView: View {
             }
         }
     }
+}
+
+private struct ScreenTimeHomeSection: View {
+    let day: IntentScreenDay
+    let recentDays: [IntentScreenDay]
+
+    private var hourlyPoints: [(hour: Int, hours: Double)] {
+        day.hourlyTotals.enumerated().map { index, seconds in
+            (hour: index, hours: seconds / 3600.0)
+        }
+    }
+
+    private var trendPoints: [(dayKey: String, hours: Double)] {
+        recentDays.suffix(14).map { row in
+            (dayKey: row.dayKey, hours: row.totalSeconds / 3600.0)
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            IntentPanel(padding: 18) {
+                VStack(alignment: .leading, spacing: 14) {
+                    HStack(alignment: .firstTextBaseline) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("iPhone Screen")
+                                .font(.headline)
+                                .foregroundStyle(IntentTheme.textPrimary)
+                            Text(day.dayKey)
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(IntentTheme.textSecondary)
+                        }
+
+                        Spacer()
+
+                        Text(screenDurationLabel(day.totalSeconds))
+                            .font(.system(size: 34, weight: .black, design: .rounded))
+                            .foregroundStyle(IntentTheme.amber)
+                            .monospacedDigit()
+                    }
+
+                    if !day.topApps.isEmpty {
+                        VStack(alignment: .leading, spacing: 8) {
+                            ForEach(Array(day.topApps.prefix(5).enumerated()), id: \.element.bundleId) { index, app in
+                                HStack(spacing: 10) {
+                                    Text("\(index + 1)")
+                                        .font(.caption.weight(.bold))
+                                        .foregroundStyle(IntentTheme.textSecondary)
+                                        .frame(width: 16, alignment: .leading)
+
+                                    Text(app.title)
+                                        .font(.subheadline.weight(.semibold))
+                                        .foregroundStyle(IntentTheme.textPrimary)
+                                        .lineLimit(1)
+
+                                    Spacer(minLength: 8)
+
+                                    Text(screenDurationLabel(app.seconds))
+                                        .font(.subheadline.weight(.bold))
+                                        .foregroundStyle(IntentTheme.amber)
+                                        .monospacedDigit()
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            ChartCard(title: "Hourly Screen Time", subtitle: "local hours for \(day.dayKey)") {
+                Chart {
+                    ForEach(hourlyPoints, id: \.hour) { point in
+                        BarMark(
+                            x: .value("Hour", point.hour),
+                            y: .value("Hours", point.hours)
+                        )
+                        .foregroundStyle(IntentTheme.amber.gradient)
+                        .cornerRadius(3)
+                    }
+                }
+                .chartXScale(domain: 0...23)
+                .chartXAxis {
+                    AxisMarks(values: [0, 6, 12, 18, 23]) { value in
+                        AxisGridLine()
+                        AxisValueLabel {
+                            if let hour = value.as(Int.self) {
+                                Text(String(format: "%02d", hour))
+                            }
+                        }
+                    }
+                }
+                .chartYAxis {
+                    AxisMarks(position: .leading) { value in
+                        AxisGridLine()
+                        AxisValueLabel {
+                            if let hours = value.as(Double.self) {
+                                Text(hours < 1 ? String(format: "%.0fm", hours * 60) : String(format: "%.1fh", hours))
+                            }
+                        }
+                    }
+                }
+                .frame(height: 180)
+            }
+
+            if trendPoints.count >= 2 {
+                ChartCard(title: "Screen Trend", subtitle: "last \(trendPoints.count) days") {
+                    Chart {
+                        ForEach(Array(trendPoints.enumerated()), id: \.offset) { _, point in
+                            AreaMark(
+                                x: .value("Day", point.dayKey),
+                                y: .value("Hours", point.hours)
+                            )
+                            .foregroundStyle(IntentTheme.amber.opacity(0.18).gradient)
+                            .interpolationMethod(.catmullRom)
+
+                            LineMark(
+                                x: .value("Day", point.dayKey),
+                                y: .value("Hours", point.hours)
+                            )
+                            .foregroundStyle(IntentTheme.amber)
+                            .interpolationMethod(.catmullRom)
+                            .lineStyle(StrokeStyle(lineWidth: 2.5))
+
+                            PointMark(
+                                x: .value("Day", point.dayKey),
+                                y: .value("Hours", point.hours)
+                            )
+                            .foregroundStyle(IntentTheme.amber)
+                            .symbolSize(28)
+                        }
+                    }
+                    .chartXAxis {
+                        AxisMarks(values: .automatic(desiredCount: 4)) { _ in
+                            AxisValueLabel(collisionResolution: .greedy)
+                        }
+                    }
+                    .frame(height: 170)
+                }
+            }
+        }
+    }
+}
+
+private func screenDurationLabel(_ seconds: Double) -> String {
+    let totalMinutes = Int((seconds / 60.0).rounded())
+    if totalMinutes < 60 {
+        return "\(max(totalMinutes, 0))m"
+    }
+    let hours = Double(totalMinutes) / 60.0
+    if hours >= 10 {
+        return String(format: "%.0fh", hours)
+    }
+    if totalMinutes % 60 == 0 {
+        return String(format: "%.0fh", hours)
+    }
+    return String(format: "%.1fh", hours)
 }
 
 private struct IntentionalityTrendsView: View {
@@ -254,6 +420,33 @@ private struct IntentionalitySettingsView: View {
 
                     IntentPanel {
                         VStack(alignment: .leading, spacing: 12) {
+                            Text("Screen Time Notification")
+                                .font(.headline)
+                                .foregroundStyle(IntentTheme.textPrimary)
+
+                            DatePicker(
+                                "Notify at",
+                                selection: Binding(
+                                    get: { model.configuration.screenNotificationTimeDate },
+                                    set: { date in
+                                        model.updateConfiguration { configuration in
+                                            configuration.setScreenNotificationTime(from: date)
+                                        }
+                                    }
+                                ),
+                                displayedComponents: .hourAndMinute
+                            )
+                            .tint(IntentTheme.accent)
+                            .foregroundStyle(IntentTheme.textPrimary)
+
+                            Text(screenNotificationDayRuleCopy(for: model.configuration))
+                                .font(.caption)
+                                .foregroundStyle(IntentTheme.textSecondary)
+                        }
+                    }
+
+                    IntentPanel {
+                        VStack(alignment: .leading, spacing: 12) {
                             Text("Data Window")
                                 .font(.headline)
                                 .foregroundStyle(IntentTheme.textPrimary)
@@ -270,6 +463,13 @@ private struct IntentionalitySettingsView: View {
             }
         }
     }
+}
+
+private func screenNotificationDayRuleCopy(for configuration: IntentConfiguration) -> String {
+    if configuration.screenNotificationUsesPreviousDay {
+        return "AM times summarize the previous day. Default 12:00 AM looks at yesterday."
+    }
+    return "PM times summarize the same day as the notification."
 }
 
 private struct IntentScreenBackground<Content: View>: View {
