@@ -1056,7 +1056,7 @@ final class IntentAppModel: ObservableObject {
                 body: IntentScreenRecentRequest(
                     deviceId: configuration.deviceId,
                     deviceSecret: configuration.deviceSecret,
-                    limit: max(21, metricsWindowDays)
+                    limit: 90
                 )
             )
             screenDays = recent.days.sorted { $0.dayKey < $1.dayKey }
