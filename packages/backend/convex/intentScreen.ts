@@ -483,11 +483,11 @@ export const listRecentScreenDays = internalQuery({
     const byDayKey = new Map<string, Doc<"intentScreenDays">>();
 
     for (const ownerDeviceId of screenOwnerCandidates(args.deviceId)) {
+      // collect by calendar dayKey (not ingest time) so contiguous days never drop out
       const rows = await ctx.db
         .query("intentScreenDays")
-        .withIndex("by_owner_collectedAt", (q: any) => q.eq("ownerDeviceId", ownerDeviceId))
-        .order("desc")
-        .take(limit * 3);
+        .withIndex("by_owner_dayKey", (q: any) => q.eq("ownerDeviceId", ownerDeviceId))
+        .collect();
       for (const row of rows) {
         const existing = byDayKey.get(row.dayKey);
         if (!existing || row.collectedAt > existing.collectedAt) {
