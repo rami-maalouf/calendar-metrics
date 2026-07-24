@@ -20,6 +20,7 @@ import type * as healthCheck from "../healthCheck.js";
 import type * as http from "../http.js";
 import type * as intent from "../intent.js";
 import type * as intentHttp from "../intentHttp.js";
+import type * as intentScreen from "../intentScreen.js";
 import type * as metricObservations from "../metricObservations.js";
 import type * as privateData from "../privateData.js";
 import type * as secrets from "../secrets.js";
@@ -44,6 +45,7 @@ declare const fullApi: ApiFromModules<{
   http: typeof http;
   intent: typeof intent;
   intentHttp: typeof intentHttp;
+  intentScreen: typeof intentScreen;
   metricObservations: typeof metricObservations;
   privateData: typeof privateData;
   secrets: typeof secrets;
