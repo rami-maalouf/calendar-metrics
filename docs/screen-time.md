@@ -73,11 +73,19 @@ All require `deviceId` + `deviceSecret`.
 |---|---|
 | `POST /intent/device/screen/ingest` | Upsert one day + apps + hours |
 | `POST /intent/device/screen/summary` | Latest (or `dayKey`) summary including hours |
+| `POST /intent/device/screen/recent` | Recent day rollups for charts (shared across devices) |
 | `POST /intent/device/screen/ack-notification` | Mark notification delivered |
+
+Screen rows are stored under a shared owner (`intent_shared`) so Mac + iOS paired devices all see the same phone data.
 
 ## Phone notification
 
-**Intent iOS:** on launch / after pair, fetches `/screen/summary`. If `notificationDeliveredAt` is null, posts a local notification and acks.
+**Intent iOS:** Settings → **Screen Time Notification** (default `12:00 AM`).
+
+- **AM** (before noon): notification is about the **previous** calendar day
+- **PM** (noon and later): notification is about the **same** calendar day
+
+At the chosen time the app schedules a local reminder. On launch / foreground after that fire, Intent fetches `/screen/summary` for the matching `dayKey`. If `notificationDeliveredAt` is null, it posts the detailed local notification and acks.
 
 **Shortcuts (optional):** schedule a morning Shortcut that POSTs summary and uses “Show Notification” with `day.notificationBody` - useful if the app is not opened.
 
