@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		26D9E0A130AAB10000C0D001 /* ConvexMobile in Frameworks */ = {isa = PBXBuildFile; productRef = 26D9E0A330AAB10000C0D001 /* ConvexMobile */; };
+		26D9E0BD30AAB20000C0D001 /* IntentWidgetsExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 26D9E0B130AAB20000C0D001 /* IntentWidgetsExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -25,13 +26,45 @@
 			remoteGlobalIDString = 25A6C4E62F5FBD3D00687236;
 			remoteInfo = Intent;
 		};
+		26D9E0BA30AAB20000C0D001 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 25A6C4DF2F5FBD3D00687236 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 26D9E0B330AAB20000C0D001;
+			remoteInfo = IntentWidgetsExtension;
+		};
 /* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		26D9E0BC30AAB20000C0D001 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				26D9E0BD30AAB20000C0D001 /* IntentWidgetsExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		25A6C4E72F5FBD3D00687236 /* Intent.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Intent.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		25A6C4F62F5FBD3F00687236 /* IntentTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = IntentTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		25A6C5002F5FBD4000687236 /* IntentUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = IntentUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		26D9E0B130AAB20000C0D001 /* IntentWidgetsExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = IntentWidgetsExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		26D9E0BE30AAB20000C0D001 /* Exceptions for "IntentWidgets" folder in "IntentWidgetsExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 26D9E0B330AAB20000C0D001 /* IntentWidgetsExtension */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		25A6C4E92F5FBD3D00687236 /* Intent */ = {
@@ -47,6 +80,19 @@
 		25A6C5032F5FBD4000687236 /* IntentUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = IntentUITests;
+			sourceTree = "<group>";
+		};
+		26D9E0B230AAB20000C0D001 /* IntentWidgets */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				26D9E0BE30AAB20000C0D001 /* Exceptions for "IntentWidgets" folder in "IntentWidgetsExtension" target */,
+			);
+			path = IntentWidgets;
+			sourceTree = "<group>";
+		};
+		26D9E0C030AAB20000C0D001 /* IntentShared */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = IntentShared;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -74,6 +120,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		26D9E0B530AAB20000C0D001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -81,6 +134,8 @@
 			isa = PBXGroup;
 			children = (
 				25A6C4E92F5FBD3D00687236 /* Intent */,
+				26D9E0C030AAB20000C0D001 /* IntentShared */,
+				26D9E0B230AAB20000C0D001 /* IntentWidgets */,
 				25A6C4F92F5FBD3F00687236 /* IntentTests */,
 				25A6C5032F5FBD4000687236 /* IntentUITests */,
 				25A6C4E82F5FBD3D00687236 /* Products */,
@@ -93,6 +148,7 @@
 				25A6C4E72F5FBD3D00687236 /* Intent.app */,
 				25A6C4F62F5FBD3F00687236 /* IntentTests.xctest */,
 				25A6C5002F5FBD4000687236 /* IntentUITests.xctest */,
+				26D9E0B130AAB20000C0D001 /* IntentWidgetsExtension.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -107,13 +163,16 @@
 				25A6C4E32F5FBD3D00687236 /* Sources */,
 				25A6C4E42F5FBD3D00687236 /* Frameworks */,
 				25A6C4E52F5FBD3D00687236 /* Resources */,
+				26D9E0BC30AAB20000C0D001 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				26D9E0BB30AAB20000C0D001 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				25A6C4E92F5FBD3D00687236 /* Intent */,
+				26D9E0C030AAB20000C0D001 /* IntentShared */,
 			);
 			name = Intent;
 			packageProductDependencies = (
@@ -169,6 +228,29 @@
 			productReference = 25A6C5002F5FBD4000687236 /* IntentUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
+		26D9E0B330AAB20000C0D001 /* IntentWidgetsExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 26D9E0B730AAB20000C0D001 /* Build configuration list for PBXNativeTarget "IntentWidgetsExtension" */;
+			buildPhases = (
+				26D9E0B430AAB20000C0D001 /* Sources */,
+				26D9E0B530AAB20000C0D001 /* Frameworks */,
+				26D9E0B630AAB20000C0D001 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				26D9E0B230AAB20000C0D001 /* IntentWidgets */,
+				26D9E0C030AAB20000C0D001 /* IntentShared */,
+			);
+			name = IntentWidgetsExtension;
+			packageProductDependencies = (
+			);
+			productName = IntentWidgetsExtension;
+			productReference = 26D9E0B130AAB20000C0D001 /* IntentWidgetsExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -189,6 +271,9 @@
 					25A6C4FF2F5FBD4000687236 = {
 						CreatedOnToolsVersion = 26.3;
 						TestTargetID = 25A6C4E62F5FBD3D00687236;
+					};
+					26D9E0B330AAB20000C0D001 = {
+						CreatedOnToolsVersion = 26.3;
 					};
 				};
 			};
@@ -212,6 +297,7 @@
 				25A6C4E62F5FBD3D00687236 /* Intent */,
 				25A6C4F52F5FBD3F00687236 /* IntentTests */,
 				25A6C4FF2F5FBD4000687236 /* IntentUITests */,
+				26D9E0B330AAB20000C0D001 /* IntentWidgetsExtension */,
 			);
 		};
 /* End PBXProject section */
@@ -232,6 +318,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		25A6C4FE2F5FBD4000687236 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		26D9E0B630AAB20000C0D001 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -262,6 +355,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		26D9E0B430AAB20000C0D001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -274,6 +374,11 @@
 			isa = PBXTargetDependency;
 			target = 25A6C4E62F5FBD3D00687236 /* Intent */;
 			targetProxy = 25A6C5012F5FBD4000687236 /* PBXContainerItemProxy */;
+		};
+		26D9E0BB30AAB20000C0D001 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 26D9E0B330AAB20000C0D001 /* IntentWidgetsExtension */;
+			targetProxy = 26D9E0BA30AAB20000C0D001 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -406,7 +511,7 @@
 				CODE_SIGN_ENTITLEMENTS = Intent/Intent.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_TEAM = 3V2UU7RRK9;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -439,7 +544,7 @@
 				CODE_SIGN_ENTITLEMENTS = Intent/Intent.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_TEAM = 3V2UU7RRK9;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -469,7 +574,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_TEAM = 3V2UU7RRK9;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 26.2;
@@ -490,7 +595,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_TEAM = 3V2UU7RRK9;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 26.2;
@@ -510,7 +615,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_TEAM = 3V2UU7RRK9;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
@@ -529,7 +634,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_TEAM = 3V2UU7RRK9;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
@@ -541,6 +646,62 @@
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TEST_TARGET_NAME = Intent;
+			};
+			name = Release;
+		};
+		26D9E0B830AAB20000C0D001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = IntentWidgets/IntentWidgets.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 3;
+				DEVELOPMENT_TEAM = 3V2UU7RRK9;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = IntentWidgets/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Intent Widgets";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = studio.orbitlabs.Intent.IntentWidgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		26D9E0B930AAB20000C0D001 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = IntentWidgets/IntentWidgets.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 3;
+				DEVELOPMENT_TEAM = 3V2UU7RRK9;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = IntentWidgets/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Intent Widgets";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = studio.orbitlabs.Intent.IntentWidgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
 			};
 			name = Release;
 		};
@@ -579,6 +740,15 @@
 			buildConfigurations = (
 				25A6C5112F5FBD4000687236 /* Debug */,
 				25A6C5122F5FBD4000687236 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		26D9E0B730AAB20000C0D001 /* Build configuration list for PBXNativeTarget "IntentWidgetsExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				26D9E0B830AAB20000C0D001 /* Debug */,
+				26D9E0B930AAB20000C0D001 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

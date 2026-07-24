@@ -10,6 +10,7 @@ import Combine
 import ConvexMobile
 import Foundation
 import UserNotifications
+import WidgetKit
 
 @MainActor
 final class IntentAppModel: ObservableObject {
@@ -22,6 +23,7 @@ final class IntentAppModel: ObservableObject {
     @Published var deviceState: IntentDeviceState?
     @Published var dashboardState: IntentDashboardState?
     @Published var metricsState: IntentMetricsState?
+    @Published var intentionalityState: IntentIntentionalityState?
     @Published var activeReview: IntentReviewContext?
     @Published var isBootstrapping = false
     @Published var isSubmittingReview = false
@@ -41,6 +43,7 @@ final class IntentAppModel: ObservableObject {
     private var webSocketStateSubscription: AnyCancellable?
     private var settingsSyncTask: Task<Void, Never>?
     private var dailyReportTask: Task<Void, Never>?
+    private var intentionalityTask: Task<Void, Never>?
     private var isPullInFlight = false
     private var isDashboardRefreshInFlight = false
     private var startFocusInFlight = Set<String>()
@@ -69,6 +72,11 @@ final class IntentAppModel: ObservableObject {
         self.dailyReports = IntentDailyReportStore.shared.load()
         if configuration.isPaired {
             connectionStatus = "Ready"
+            // begin polling immediately: the app can launch straight to the
+            // menu bar with no window, so view-level .task hooks never fire
+            Task { [weak self] in
+                self?.start()
+            }
         }
     }
 
@@ -105,6 +113,13 @@ final class IntentAppModel: ObservableObject {
                 await self.dailyReportLoop()
             }
         }
+
+        if intentionalityTask == nil {
+            intentionalityTask = Task { [weak self] in
+                guard let self else { return }
+                await self.intentionalityLoop()
+            }
+        }
     }
 
     func stop() {
@@ -113,6 +128,8 @@ final class IntentAppModel: ObservableObject {
         settingsSyncTask = nil
         dailyReportTask?.cancel()
         dailyReportTask = nil
+        intentionalityTask?.cancel()
+        intentionalityTask = nil
     }
 
     func updateConfiguration(_ update: (inout IntentLocalConfiguration) -> Void) {
@@ -314,6 +331,16 @@ final class IntentAppModel: ObservableObject {
     func refreshMetricsNow() async {
         do {
             try await loadMetrics(showErrors: true)
+            try await loadIntentionality(showErrors: true)
+        } catch {
+            lastNotice = nil
+            lastError = displayMessage(for: error)
+        }
+    }
+
+    func refreshIntentionalityNow() async {
+        do {
+            try await loadIntentionality(showErrors: true)
         } catch {
             lastNotice = nil
             lastError = displayMessage(for: error)
@@ -978,7 +1005,7 @@ final class IntentAppModel: ObservableObject {
         return response
     }
 
-    private func refreshMetricsOnce() async {
+    func refreshMetricsOnce() async {
         do {
             try await loadMetrics(showErrors: false)
         } catch {
@@ -986,6 +1013,70 @@ final class IntentAppModel: ObservableObject {
                 lastNotice = nil
                 lastError = displayMessage(for: error)
             }
+        }
+        await refreshIntentionalityOnce()
+    }
+
+    // keeps the widget fed even if the metrics/visuals tabs are never opened:
+    // refresh right after start(), then every 30 minutes
+    private func intentionalityLoop() async {
+        await refreshIntentionalityOnce()
+
+        while !Task.isCancelled {
+            do {
+                try await Task.sleep(nanoseconds: UInt64(30 * 60) * 1_000_000_000)
+            } catch {
+                return
+            }
+
+            await refreshIntentionalityOnce()
+        }
+    }
+
+    private func refreshIntentionalityOnce() async {
+        try? await loadIntentionality(showErrors: false)
+        await publishTrackedHoursToWidgets()
+    }
+
+    // dedicated 90-day fetch so the tracked-hours widget is independent of
+    // the metrics tab window picker; compacted before publishing
+    private func publishTrackedHoursToWidgets() async {
+        guard configuration.isPaired else {
+            return
+        }
+
+        do {
+            let response: IntentDeviceMetricsEnvelope = try await post(
+                path: "/intent/device/metrics",
+                body: IntentDeviceMetricsRequest(
+                    deviceId: configuration.deviceId,
+                    deviceSecret: configuration.deviceSecret,
+                    windowDays: 90,
+                    timeZoneOffsetMinutes: TimeZone.current.secondsFromGMT() / 60
+                )
+            )
+
+            let days = (response.state.dailyDurationSeries ?? []).map { point in
+                IntentTrackedHoursSnapshot.Day(
+                    dayStartMs: Double(point.dayStart),
+                    durationMs: point.durationMs,
+                    sessionCount: point.sessionCount
+                )
+            }
+            let snapshot = IntentTrackedHoursSnapshot(
+                days: days,
+                generatedAt: Date().timeIntervalSince1970 * 1000,
+                windowDays: 90
+            )
+
+            guard IntentWidgetShared.saveTrackedHours(snapshot) else {
+                IntentWidgetShared.debugLog("[trackedHours] publish failed: could not write app group defaults")
+                return
+            }
+
+            WidgetCenter.shared.reloadAllTimelines()
+        } catch {
+            IntentWidgetShared.debugLog("[trackedHours] failed: \(error)")
         }
     }
 
@@ -1044,7 +1135,8 @@ final class IntentAppModel: ObservableObject {
                 body: IntentDeviceMetricsRequest(
                     deviceId: configuration.deviceId,
                     deviceSecret: configuration.deviceSecret,
-                    windowDays: metricsWindowDays
+                    windowDays: metricsWindowDays,
+                    timeZoneOffsetMinutes: TimeZone.current.secondsFromGMT() / 60
                 )
             )
 
@@ -1054,6 +1146,44 @@ final class IntentAppModel: ObservableObject {
                 throw error
             }
         }
+    }
+
+    private func loadIntentionality(showErrors: Bool) async throws {
+        guard configuration.isPaired else {
+            intentionalityState = nil
+            return
+        }
+
+        do {
+            let response: IntentIntentionalityEnvelope = try await post(
+                path: "/intent/device/intentionality",
+                body: IntentDeviceIntentionalityRequest(
+                    deviceId: configuration.deviceId,
+                    deviceSecret: configuration.deviceSecret,
+                    // 180 days so the trend widget can show 90 days plus a
+                    // prior-90-day comparison window
+                    windowDays: max(metricsWindowDays, 180),
+                    timeZoneOffsetMinutes: TimeZone.current.secondsFromGMT() / 60
+                )
+            )
+
+            intentionalityState = response.state
+            publishIntentionalitySnapshotToWidgets(response.state)
+        } catch {
+            IntentWidgetShared.debugLog("[intentionality] failed: \(error)")
+            if showErrors {
+                throw error
+            }
+        }
+    }
+
+    private func publishIntentionalitySnapshotToWidgets(_ state: IntentIntentionalityState) {
+        guard IntentWidgetShared.saveSnapshot(state) else {
+            IntentWidgetShared.debugLog("[intentionality] publish failed: could not write app group defaults")
+            return
+        }
+
+        WidgetCenter.shared.reloadAllTimelines()
     }
 
     private func maybeGenerateScheduledDailyReport() async {

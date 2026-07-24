@@ -75,6 +75,7 @@ struct IntentDeviceMetricsRequest: Encodable {
     let deviceId: String
     let deviceSecret: String
     let windowDays: Int
+    let timeZoneOffsetMinutes: Int
 }
 
 struct IntentDeviceDailyReportRequest: Encodable {
@@ -145,6 +146,21 @@ struct IntentDailyReportContextEnvelope: Decodable {
     let state: IntentDailyReportContext
 }
 
+struct IntentDeviceIntentionalityRequest: Encodable {
+    let deviceId: String
+    let deviceSecret: String
+    let windowDays: Int
+    let timeZoneOffsetMinutes: Int
+}
+
+struct IntentIntentionalityEnvelope: Decodable {
+    let ok: Bool
+    let state: IntentIntentionalityState
+}
+
+// IntentIntentionalityState lives in IntentShared/IntentionalityModels.swift,
+// compiled into both the app and the widget extension.
+
 struct IntentPullResponse: Decodable {
     let ok: Bool
     let pulled: Bool
@@ -179,6 +195,8 @@ struct IntentMetricsState: Decodable {
     let dominantCategory: String?
     let streakDays: Int
     let signalAverages: [IntentSignalAverage]
+    let signalDailySeries: [IntentSignalDailyPoint]?
+    let dailyDurationSeries: [IntentDailyDurationPoint]?
     let categoryBreakdown: [IntentCategoryBreakdown]
     let trendSeries: [IntentMetricTrendPoint]
     let dailyVolume: [IntentDailyVolumePoint]
@@ -208,6 +226,19 @@ struct IntentDailyReportContext: Codable, Equatable {
     let totalDistractions: Int
     let topCategories: [IntentDailyReportCategory]
     let sessions: [IntentDailyReportSession]
+}
+
+struct IntentSignalDailyPoint: Decodable, Identifiable, Equatable {
+    let id: String
+    let dayStart: Int
+    let metrics: [String: Double]
+}
+
+struct IntentDailyDurationPoint: Decodable, Identifiable, Equatable {
+    let id: String
+    let dayStart: Int
+    let durationMs: Double
+    let sessionCount: Int
 }
 
 struct IntentSignalAverage: Decodable, Identifiable, Equatable {
