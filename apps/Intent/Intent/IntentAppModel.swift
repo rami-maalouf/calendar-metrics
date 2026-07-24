@@ -24,6 +24,8 @@ final class IntentAppModel: ObservableObject {
     @Published var dashboardState: IntentDashboardState?
     @Published var metricsState: IntentMetricsState?
     @Published var intentionalityState: IntentIntentionalityState?
+    @Published var screenDay: IntentScreenDay?
+    @Published var screenDays: [IntentScreenDay] = []
     @Published var activeReview: IntentReviewContext?
     @Published var isBootstrapping = false
     @Published var isSubmittingReview = false
@@ -1015,12 +1017,14 @@ final class IntentAppModel: ObservableObject {
             }
         }
         await refreshIntentionalityOnce()
+        await refreshScreenOnce()
     }
 
     // keeps the widget fed even if the metrics/visuals tabs are never opened:
     // refresh right after start(), then every 30 minutes
     private func intentionalityLoop() async {
         await refreshIntentionalityOnce()
+        await refreshScreenOnce()
 
         while !Task.isCancelled {
             do {
@@ -1030,12 +1034,50 @@ final class IntentAppModel: ObservableObject {
             }
 
             await refreshIntentionalityOnce()
+            await refreshScreenOnce()
         }
     }
 
     private func refreshIntentionalityOnce() async {
         try? await loadIntentionality(showErrors: false)
         await publishTrackedHoursToWidgets()
+    }
+
+    private func refreshScreenOnce() async {
+        guard configuration.isPaired else {
+            screenDay = nil
+            screenDays = []
+            return
+        }
+
+        do {
+            let recent: IntentScreenRecentResponse = try await post(
+                path: "/intent/device/screen/recent",
+                body: IntentScreenRecentRequest(
+                    deviceId: configuration.deviceId,
+                    deviceSecret: configuration.deviceSecret,
+                    limit: max(21, metricsWindowDays)
+                )
+            )
+            screenDays = recent.days.sorted { $0.dayKey < $1.dayKey }
+
+            let preferredDayKey =
+                screenDays.reversed().first(where: { $0.totalSeconds >= 30 * 60 })?.dayKey
+                ?? screenDays.last?.dayKey
+
+            let summary: IntentScreenSummaryResponse = try await post(
+                path: "/intent/device/screen/summary",
+                body: IntentScreenSummaryRequest(
+                    deviceId: configuration.deviceId,
+                    deviceSecret: configuration.deviceSecret,
+                    dayKey: preferredDayKey,
+                    includeHours: true
+                )
+            )
+            screenDay = summary.day ?? screenDays.last
+        } catch {
+            IntentWidgetShared.debugLog("[screen] failed: \(error)")
+        }
     }
 
     // dedicated 90-day fetch so the tracked-hours widget is independent of

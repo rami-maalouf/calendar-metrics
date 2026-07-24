@@ -158,6 +158,63 @@ struct IntentIntentionalityEnvelope: Decodable {
     let state: IntentIntentionalityState
 }
 
+struct IntentScreenApp: Decodable, Equatable {
+    let bundleId: String
+    let title: String
+    let seconds: Double
+}
+
+struct IntentScreenHour: Decodable, Equatable, Identifiable {
+    let hourOfDay: Int
+    let hourStartMs: Int
+    let totalSeconds: Double
+    let topApps: [IntentScreenApp]
+
+    var id: Int { hourOfDay }
+}
+
+struct IntentScreenDay: Decodable, Equatable, Identifiable {
+    let dayKey: String
+    let source: String
+    let sourceDeviceId: String
+    let platform: String
+    let totalSeconds: Double
+    let eventCount: Int
+    let cleanedEventCount: Int
+    let topApps: [IntentScreenApp]
+    let hourlyTotals: [Double]
+    let hours: [IntentScreenHour]?
+    let notificationBody: String
+    let notificationDeliveredAt: Int?
+    let timeZoneOffsetMinutes: Int
+    let collectedAt: Int
+
+    var id: String { "\(dayKey)-\(sourceDeviceId)" }
+}
+
+struct IntentScreenSummaryRequest: Encodable {
+    let deviceId: String
+    let deviceSecret: String
+    let dayKey: String?
+    let includeHours: Bool
+}
+
+struct IntentScreenRecentRequest: Encodable {
+    let deviceId: String
+    let deviceSecret: String
+    let limit: Int
+}
+
+struct IntentScreenSummaryResponse: Decodable {
+    let ok: Bool
+    let day: IntentScreenDay?
+}
+
+struct IntentScreenRecentResponse: Decodable {
+    let ok: Bool
+    let days: [IntentScreenDay]
+}
+
 // IntentIntentionalityState lives in IntentShared/IntentionalityModels.swift,
 // compiled into both the app and the widget extension.
 
