@@ -63,3 +63,6 @@ scripts/screen-time/.venv/
 # Xcode
 *.xcuserstate
 xcuserdata/
+# python
+**/__pycache__/
+*.py[cod]
