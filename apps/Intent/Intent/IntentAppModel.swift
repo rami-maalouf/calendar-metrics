@@ -1062,7 +1062,8 @@ final class IntentAppModel: ObservableObject {
             screenDays = recent.days.sorted { $0.dayKey < $1.dayKey }
 
             let preferredDayKey =
-                screenDays.reversed().first(where: { $0.totalSeconds >= 30 * 60 })?.dayKey
+                screenDay?.dayKey
+                ?? screenDays.reversed().first(where: { $0.totalSeconds >= 30 * 60 })?.dayKey
                 ?? screenDays.last?.dayKey
 
             let summary: IntentScreenSummaryResponse = try await post(
@@ -1077,6 +1078,39 @@ final class IntentAppModel: ObservableObject {
             screenDay = summary.day ?? screenDays.last
         } catch {
             IntentWidgetShared.debugLog("[screen] failed: \(error)")
+        }
+    }
+
+    func refreshScreenNow() async {
+        await refreshScreenOnce()
+    }
+
+    func selectScreenDay(_ dayKey: String) async {
+        guard configuration.isPaired else {
+            return
+        }
+
+        do {
+            if screenDays.isEmpty {
+                await refreshScreenOnce()
+            }
+            let summary: IntentScreenSummaryResponse = try await post(
+                path: "/intent/device/screen/summary",
+                body: IntentScreenSummaryRequest(
+                    deviceId: configuration.deviceId,
+                    deviceSecret: configuration.deviceSecret,
+                    dayKey: dayKey,
+                    includeHours: true
+                )
+            )
+            if let day = summary.day {
+                screenDay = day
+                if !screenDays.contains(where: { $0.dayKey == day.dayKey }) {
+                    screenDays = (screenDays + [day]).sorted { $0.dayKey < $1.dayKey }
+                }
+            }
+        } catch {
+            IntentWidgetShared.debugLog("[screen] select failed: \(error)")
         }
     }
 

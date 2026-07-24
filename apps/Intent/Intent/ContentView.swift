@@ -11,6 +11,7 @@ import SwiftUI
 private enum IntentScreen: String, CaseIterable, Identifiable {
     case dashboard
     case visuals
+    case screen
     case reports
     case metrics
     case settings
@@ -23,6 +24,8 @@ private enum IntentScreen: String, CaseIterable, Identifiable {
             return "Dashboard"
         case .visuals:
             return "Visuals"
+        case .screen:
+            return "iPhone Screen"
         case .reports:
             return "Reports"
         case .metrics:
@@ -38,6 +41,8 @@ private enum IntentScreen: String, CaseIterable, Identifiable {
             return "Live work ledger"
         case .visuals:
             return "The signals, big"
+        case .screen:
+            return "Phone hours and apps"
         case .reports:
             return "End-of-day wrap-ups"
         case .metrics:
@@ -53,6 +58,8 @@ private enum IntentScreen: String, CaseIterable, Identifiable {
             return "square.grid.2x2.fill"
         case .visuals:
             return "chart.bar.fill"
+        case .screen:
+            return "iphone"
         case .reports:
             return "doc.text.image.fill"
         case .metrics:
@@ -98,6 +105,8 @@ struct ContentView: View {
                     dashboardView
                 case .visuals:
                     IntentVisualsView(model: model)
+                case .screen:
+                    IntentScreenTimeView(model: model)
                 case .reports:
                     IntentReportsView(model: model)
                 case .metrics:
@@ -159,6 +168,8 @@ struct ContentView: View {
                 await model.refreshMetricsOnce()
             case .visuals, .metrics:
                 await model.refreshMetricsNow()
+            case .screen:
+                await model.refreshScreenNow()
             case .reports, .settings:
                 break
             }

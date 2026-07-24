@@ -24,12 +24,8 @@ struct IntentVisualsView: View {
                         signalGrid(metrics)
                         distractionsTile(metrics)
                     }
-                } else if model.screenDay == nil && model.screenDays.isEmpty {
+                } else {
                     emptyState
-                }
-
-                if let screenDay = model.screenDay {
-                    ScreenTimeTile(day: screenDay, recentDays: model.screenDays)
                 }
             }
             .padding(28)
@@ -682,109 +678,6 @@ private struct DistractionsTile: View {
     }
 }
 
-private struct ScreenTimeTile: View {
-    let day: IntentScreenDay
-    let recentDays: [IntentScreenDay]
-
-    private var hue: Color { VisualsPalette.hue(for: "screenTime") }
-
-    private var hourlyPoints: [(hour: Int, hours: Double)] {
-        day.hourlyTotals.enumerated().map { index, seconds in
-            (hour: index, hours: seconds / 3600.0)
-        }
-    }
-
-    private var trendPoints: [VisualsDayPoint] {
-        recentDays.suffix(21).compactMap { row in
-            guard let date = Self.dayKeyFormatter.date(from: row.dayKey) else {
-                return nil
-            }
-            return VisualsDayPoint(day: date, value: row.totalSeconds / 3600.0)
-        }
-    }
-
-    private static let dayKeyFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.calendar = Calendar(identifier: .gregorian)
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = .current
-        formatter.dateFormat = "yyyy-MM-dd"
-        return formatter
-    }()
-
-    var body: some View {
-        VisualsPanel {
-            VStack(alignment: .leading, spacing: 16) {
-                HStack(alignment: .firstTextBaseline) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("iPhone Screen")
-                            .font(.system(size: 14, weight: .semibold, design: .rounded))
-                            .foregroundStyle(.secondary)
-                        Text(day.dayKey)
-                            .font(.system(size: 12, weight: .medium, design: .rounded))
-                            .foregroundStyle(.tertiary)
-                    }
-
-                    Spacer()
-
-                    HStack(alignment: .firstTextBaseline, spacing: 5) {
-                        Text(hoursLabel(day.totalSeconds / 3600.0))
-                            .font(.system(size: 46, weight: .heavy, design: .rounded))
-                        Text("day")
-                            .font(.system(size: 15, weight: .semibold, design: .rounded))
-                            .foregroundStyle(.tertiary)
-                    }
-                }
-
-                Chart {
-                    ForEach(hourlyPoints, id: \.hour) { point in
-                        BarMark(
-                            x: .value("Hour", point.hour),
-                            y: .value("Hours", point.hours)
-                        )
-                        .foregroundStyle(hue.gradient)
-                        .cornerRadius(3)
-                    }
-                }
-                .chartXScale(domain: 0...23)
-                .chartXAxis {
-                    AxisMarks(values: [0, 6, 12, 18, 23]) { value in
-                        AxisGridLine()
-                        AxisValueLabel {
-                            if let hour = value.as(Int.self) {
-                                Text(String(format: "%02d", hour))
-                            }
-                        }
-                    }
-                }
-                .frame(height: 170)
-
-                if !day.topApps.isEmpty {
-                    HStack(alignment: .top, spacing: 18) {
-                        ForEach(Array(day.topApps.prefix(4).enumerated()), id: \.element.bundleId) { _, app in
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(app.title)
-                                    .font(.system(size: 12, weight: .semibold, design: .rounded))
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(2)
-                                Text(hoursLabel(app.seconds / 3600.0))
-                                    .font(.system(size: 20, weight: .bold, design: .rounded))
-                                    .monospacedDigit()
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                    }
-                }
-
-                if trendPoints.count >= 2 {
-                    CountChart(points: trendPoints, hue: hue)
-                        .frame(height: 120)
-                }
-            }
-        }
-    }
-}
-
 private struct DeltaBadge: View {
     let delta: Double
     let upIsGood: Bool
@@ -894,7 +787,7 @@ private struct ScoreChart: View {
     }
 }
 
-private struct CountChart: View {
+struct CountChart: View {
     let points: [VisualsDayPoint]
     let hue: Color
 
@@ -979,7 +872,7 @@ private struct HoverReadout: View {
     }
 }
 
-private struct VisualsPanel<Content: View>: View {
+struct VisualsPanel<Content: View>: View {
     @ViewBuilder let content: Content
 
     var body: some View {
