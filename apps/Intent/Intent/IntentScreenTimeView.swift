@@ -49,7 +49,7 @@ struct IntentScreenTimeView: View {
                         VStack(alignment: .leading, spacing: 8) {
                             Text("No iPhone screen data yet")
                                 .font(.system(size: 22, weight: .bold, design: .rounded))
-                            Text("Run the Biome collector or wait for the 8:05 AM launchd job.")
+                            Text("Run the Biome collector or wait for the midnight launchd job.")
                                 .foregroundStyle(.secondary)
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)

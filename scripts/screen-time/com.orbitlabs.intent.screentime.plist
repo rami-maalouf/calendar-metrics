@@ -12,12 +12,13 @@
 		<string>/bin/zsh</string>
 		<string>REPLACE_WITH_HOME/.mac-automations/intent-screentime/run_collect.zsh</string>
 	</array>
+	<!-- midnight local: same clock as Intent iOS screen summary notification (default 00:00, previous day). -->
 	<key>StartCalendarInterval</key>
 	<dict>
 		<key>Hour</key>
-		<integer>8</integer>
+		<integer>0</integer>
 		<key>Minute</key>
-		<integer>5</integer>
+		<integer>0</integer>
 	</dict>
 	<key>RunAtLoad</key>
 	<false/>

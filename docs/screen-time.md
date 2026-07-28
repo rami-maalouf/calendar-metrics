@@ -72,7 +72,7 @@ launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/studio.orbitlabs.intent.
 
 Grant **Full Disk Access** to `/bin/zsh` (and Terminal) so live `~/Library/Biome` is readable when launchd runs.
 
-Default schedule: **08:05** local time (collector defaults to yesterday).
+Default schedule: **00:00** local time (collector defaults to yesterday) - aligned with the Intent iOS screen summary notification default.
 ## HTTP API
 
 All require `deviceId` + `deviceSecret`.
