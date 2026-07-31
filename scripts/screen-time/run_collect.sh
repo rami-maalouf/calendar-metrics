@@ -18,10 +18,24 @@ fi
 export AW_IMPORT_BIN="${AW_IMPORT_BIN:-$SCRIPT_DIR/.venv/bin/aw-import-screentime}"
 
 cd "$SCRIPT_DIR"
+ARGS=("$@")
+
+if [[ -z "${BIOME_HOME:-}" && -d "$HOME/Library/Biome" ]]; then
+  SNAPSHOT_ROOT="${BIOME_SNAPSHOT_ROOT:-/tmp/intent-biome-snapshot}"
+  rm -rf "$SNAPSHOT_ROOT"
+  mkdir -p "$(dirname "$SNAPSHOT_ROOT")"
+  # launchd can access the protected Biome path via ditto even when the venv
+  # python interpreter cannot open sqlite there directly.
+  /usr/bin/ditto "$HOME/Library/Biome" "$SNAPSHOT_ROOT"
+  export BIOME_HOME="$SNAPSHOT_ROOT"
+  ARGS+=(--biome-home "$BIOME_HOME")
+fi
+
 {
   echo "=== screen time collect $(date -Iseconds) ==="
   echo "python=$PYTHON_BIN aw=$AW_IMPORT_BIN"
-  "$PYTHON_BIN" "$SCRIPT_DIR/collect_iphone_screentime.py" "$@"
+  [[ -n "${BIOME_HOME:-}" ]] && echo "biome_home=$BIOME_HOME"
+  "$PYTHON_BIN" "$SCRIPT_DIR/collect_iphone_screentime.py" "${ARGS[@]}"
   echo "=== done $(date -Iseconds) ==="
 } 2>&1 | tee -a "$LOG_FILE"
 

@@ -72,6 +72,8 @@ launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/studio.orbitlabs.intent.
 
 Grant **Full Disk Access** to `/bin/zsh` (and Terminal) so live `~/Library/Biome` is readable when launchd runs.
 
+If you use the Python.org 3.13 framework build for the collector venv, launchd may still fail to open Biome's sqlite files directly even when shell access is granted. `run_collect.sh` works around that by snapshotting `~/Library/Biome` to `/tmp/intent-biome-snapshot` and passing `--biome-home` to the collector.
+
 Default schedule: **00:00** local time (collector defaults to yesterday) - aligned with the Intent iOS screen summary notification default.
 ## HTTP API
 
