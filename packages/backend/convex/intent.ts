@@ -1050,6 +1050,36 @@ export const recordHourlyIntentionality = internalMutation({
   },
 });
 
+export const deleteHourlyIntentionalityObservation = internalMutation({
+  args: {
+    observationId: v.id("metricObservations"),
+  },
+  handler: async (ctx, args) => {
+    const observation = await ctx.db.get(args.observationId);
+    if (!observation) {
+      return { ok: false, reason: "not_found" as const };
+    }
+
+    if (
+      observation.subjectType !== "intentionalityHour" ||
+      observation.key !== "intentionality"
+    ) {
+      return { ok: false, reason: "not_intentionality_hour" as const };
+    }
+
+    await ctx.db.delete(args.observationId);
+    return {
+      ok: true as const,
+      deleted: {
+        id: observation._id,
+        score: observation.numberValue,
+        observedAt: observation.observedAt,
+        subjectId: observation.subjectId,
+      },
+    };
+  },
+});
+
 export const getIntentionalitySnapshotJson = query({
   args: {
     deviceId: v.string(),
