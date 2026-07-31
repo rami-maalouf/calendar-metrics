@@ -59,6 +59,10 @@ struct ReviewSheetView: View {
             Text(sessionWindow)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
+
+            Text("Optional. Press Esc to skip - it won't come back.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
         }
     }
 
@@ -277,9 +281,16 @@ struct ReviewSheetView: View {
 
     private var footerSection: some View {
         HStack {
-            Button("Later", role: .cancel) {
+            Button("Skip", role: .cancel) {
                 onDismiss()
             }
+            .keyboardShortcut(.cancelAction)
+            .help("Dismiss without saving. Escape also skips.")
+
+            Text("Esc")
+                .font(.caption.monospaced())
+                .foregroundStyle(.tertiary)
+                .padding(.leading, 4)
 
             Spacer()
 
@@ -287,6 +298,7 @@ struct ReviewSheetView: View {
                 onSubmit()
             }
             .buttonStyle(.borderedProminent)
+            .keyboardShortcut(.defaultAction)
             .disabled(isSubmitting || !context.draft.hasMeaningfulContent)
         }
     }

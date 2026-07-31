@@ -52,6 +52,10 @@ final class IntentAppModel: ObservableObject {
     private var completeFocusInFlight = Set<String>()
     private var presentedReviewInFlight = Set<String>()
     private var acknowledgedPresentedReviews = Set<String>()
+    private var skippedReviewIds = Set<String>()
+    private var skipReviewInFlight = Set<String>()
+    /// after a user skip, ignore (and clear) reviews for sessions that ended at or before this time
+    private var autoReviewSuppressedBeforeMs: Int = 0
     private var startFocusRetryAfter = [String: Date]()
     private var completeFocusRetryAfter = [String: Date]()
     private var knownShortcutNames = Set<String>()
@@ -285,13 +289,41 @@ final class IntentAppModel: ObservableObject {
     }
 
     func dismissReview() {
-        activeReview = nil
+        guard let review = activeReview else {
+            return
+        }
+
+        skipReviewSession(
+            review.session.id,
+            completedAtMs: review.session.stopTimeMs ?? review.session.startTimeMs
+        )
+    }
+
+    /// permanently dismiss a reflection without saving. used by Esc/Skip and the dashboard queue.
+    func skipReviewSession(_ sessionId: String, completedAtMs: Int? = nil) {
+        if activeReview?.id == sessionId {
+            activeReview = nil
+        }
+
+        skippedReviewIds.insert(sessionId)
+        let cutoff = completedAtMs ?? Int(Date().timeIntervalSince1970 * 1000)
+        autoReviewSuppressedBeforeMs = max(
+            autoReviewSuppressedBeforeMs,
+            max(cutoff, Int(Date().timeIntervalSince1970 * 1000))
+        )
+
+        Task {
+            await skipReview(sessionId: sessionId)
+        }
     }
 
     func openPendingReview() {
         guard let pendingReview = deviceState?.pendingReview else {
             return
         }
+
+        // manual open is an intentional choice - allow even if previously suppressed
+        skippedReviewIds.remove(pendingReview.id)
 
         activeReview = IntentReviewContext(
             session: pendingReview,
@@ -313,6 +345,9 @@ final class IntentAppModel: ObservableObject {
         completeFocusInFlight.removeAll()
         presentedReviewInFlight.removeAll()
         acknowledgedPresentedReviews.removeAll()
+        skippedReviewIds.removeAll()
+        skipReviewInFlight.removeAll()
+        autoReviewSuppressedBeforeMs = 0
         startFocusRetryAfter.removeAll()
         completeFocusRetryAfter.removeAll()
         knownShortcutNames.removeAll()
@@ -790,6 +825,19 @@ final class IntentAppModel: ObservableObject {
     }
 
     private func maybePresentReview(_ review: IntentPendingReview) async {
+        if skippedReviewIds.contains(review.id) {
+            await skipReview(sessionId: review.id)
+            return
+        }
+
+        let completedAtMs = review.stopTimeMs ?? review.startTimeMs
+        if completedAtMs <= autoReviewSuppressedBeforeMs {
+            // user already escaped a reflection - older backlog is gone forever
+            skippedReviewIds.insert(review.id)
+            await skipReview(sessionId: review.id)
+            return
+        }
+
         if activeReview?.id != review.id {
             activeReview = IntentReviewContext(
                 session: review,
@@ -827,6 +875,32 @@ final class IntentAppModel: ObservableObject {
             )
             acknowledgedPresentedReviews.insert(review.id)
         } catch {
+            lastNotice = nil
+            lastError = displayMessage(for: error)
+        }
+    }
+
+    private func skipReview(sessionId: String) async {
+        guard skipReviewInFlight.insert(sessionId).inserted else {
+            return
+        }
+
+        defer { skipReviewInFlight.remove(sessionId) }
+
+        do {
+            let _: IntentOKResponse = try await post(
+                path: "/intent/device/review/skip",
+                body: IntentSessionActionRequest(
+                    deviceId: configuration.deviceId,
+                    deviceSecret: configuration.deviceSecret,
+                    sessionId: sessionId
+                )
+            )
+            skippedReviewIds.insert(sessionId)
+            acknowledgedPresentedReviews.insert(sessionId)
+        } catch {
+            // keep local skip so the sheet does not bounce back while offline;
+            // next successful sync can retry via maybePresentReview
             lastNotice = nil
             lastError = displayMessage(for: error)
         }

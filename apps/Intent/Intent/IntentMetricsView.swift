@@ -143,7 +143,9 @@ struct IntentMetricsView: View {
             InsightMetricCard(
                 title: "Reviewed Blocks",
                 value: "\(metrics.reviewedSessions)",
-                caption: "\(metrics.pendingReviews) waiting in queue",
+                caption: metrics.pendingReviews > 0
+                    ? "\(metrics.pendingReviews) still open"
+                    : "none open",
                 tone: .accentColor,
                 systemImage: "checkmark.seal.fill"
             )

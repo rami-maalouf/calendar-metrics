@@ -18,6 +18,7 @@ import {
   health,
   pullDevice,
   pollDevice,
+  skipReview,
   submitReview,
   togglWebhook,
 } from "./intentHttp";
@@ -114,6 +115,12 @@ http.route({
   path: "/intent/device/review/presented",
   method: "POST",
   handler: acknowledgeReviewPresented,
+});
+
+http.route({
+  path: "/intent/device/review/skip",
+  method: "POST",
+  handler: skipReview,
 });
 
 http.route({

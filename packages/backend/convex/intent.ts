@@ -1357,6 +1357,40 @@ export const markReviewPresented = internalMutation({
   },
 });
 
+export const markReviewSkipped = internalMutation({
+  args: {
+    sessionId: v.string(),
+    deviceId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    // deviceId is authenticated at the HTTP boundary; kept for parity with other review mutations
+    void args.deviceId;
+
+    const sessionId = args.sessionId as Id<"intentSessions">;
+    const session = await ctx.db.get(sessionId);
+    if (!session) {
+      return null;
+    }
+
+    // already closed out - treat as success so clients can dismiss idempotently
+    if (session.reviewStatus === "submitted" || session.reviewStatus === "skipped") {
+      return session;
+    }
+
+    if (!isPendingReviewStatus(session.reviewStatus)) {
+      return session;
+    }
+
+    const timestamp = now();
+    await ctx.db.patch(sessionId, {
+      reviewStatus: "skipped",
+      updatedAt: timestamp,
+    });
+
+    return await ctx.db.get(sessionId);
+  },
+});
+
 export const submitReview = internalMutation({
   args: {
     sessionId: v.string(),

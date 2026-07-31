@@ -1089,6 +1089,33 @@ export const acknowledgeReviewPresented = httpAction(async (ctx, request) => {
   }
 });
 
+export const skipReview = httpAction(async (ctx, request) => {
+  try {
+    const { body } = await readJson<
+      DeviceAuthBody & { sessionId?: string }
+    >(request);
+    const device = await authenticateDevice(ctx, body ?? {});
+    if (!device || !body?.deviceId || !body.sessionId) {
+      return json(401, { error: "Invalid request." });
+    }
+
+    const session = await ctx.runMutation(internal.intent.markReviewSkipped, {
+      deviceId: body.deviceId,
+      sessionId: body.sessionId,
+    });
+
+    return json(200, {
+      ok: true,
+      session,
+    });
+  } catch (error) {
+    return json(500, {
+      error:
+        error instanceof Error ? error.message : "Failed to skip review.",
+    });
+  }
+});
+
 export const submitReview = httpAction(async (ctx, request) => {
   try {
     const { body } = await readJson<ReviewBody>(request);

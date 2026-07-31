@@ -30,8 +30,9 @@ struct MenuBarView: View {
             }
 
             if model.pendingReviewsCount > 0 {
-                Text("\(model.pendingReviewsCount) review(s) waiting")
+                Text("\(model.pendingReviewsCount) open reflection\(model.pendingReviewsCount == 1 ? "" : "s")")
                     .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Divider()

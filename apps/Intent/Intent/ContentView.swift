@@ -232,10 +232,12 @@ struct ContentView: View {
                     }
 
                     HStack(spacing: 10) {
-                        StatusBadge(
-                            title: "\(model.pendingReviewsCount) review\(model.pendingReviewsCount == 1 ? "" : "s") waiting",
-                            tone: model.pendingReviewsCount > 0 ? .yellow : .gray
-                        )
+                        if model.pendingReviewsCount > 0 {
+                            StatusBadge(
+                                title: "\(model.pendingReviewsCount) open reflection\(model.pendingReviewsCount == 1 ? "" : "s")",
+                                tone: .yellow
+                            )
+                        }
 
                         if let topCategory {
                             StatusBadge(title: topCategory.capitalized, tone: .accentColor)
@@ -338,7 +340,7 @@ struct ContentView: View {
 
             DashboardPanel {
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("Review Queue")
+                    Text("Reflection")
                         .font(.system(size: 13, weight: .semibold, design: .rounded))
                         .foregroundStyle(.secondary)
 
@@ -356,7 +358,7 @@ struct ContentView: View {
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
                         } else {
-                            Text("Capture the score and set the next block while the details are fresh.")
+                            Text("Optional. Capture it now, or skip - skipped reflections are not kept.")
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
                         }
@@ -367,6 +369,14 @@ struct ContentView: View {
                             }
                             .buttonStyle(.borderedProminent)
 
+                            Button("Skip") {
+                                model.skipReviewSession(
+                                    pendingReview.id,
+                                    completedAtMs: pendingReview.stopTimeMs ?? pendingReview.startTimeMs
+                                )
+                            }
+                            .buttonStyle(.bordered)
+
                             Button("Reconnect live sync") {
                                 Task {
                                     await model.pollOnce()
@@ -376,9 +386,9 @@ struct ContentView: View {
                             .buttonStyle(.bordered)
                         }
                     } else {
-                        Text("Inbox clear")
+                        Text("Nothing to reflect on")
                             .font(.system(size: 24, weight: .bold, design: .rounded))
-                        Text("No review is waiting right now. Keep the cadence tight and this board becomes your work memory.")
+                        Text("Reflections only appear right after a session. Skip anytime with Esc - they won't linger.")
                             .foregroundStyle(.secondary)
 
                         HStack(spacing: 12) {
@@ -599,7 +609,7 @@ struct ContentView: View {
                     .font(.footnote.monospaced())
             }
 
-            LabeledContent("Pending reviews") {
+            LabeledContent("Open reflections") {
                 Text("\(model.pendingReviewsCount)")
             }
 
@@ -720,7 +730,7 @@ struct ContentView: View {
                     .font(.system(size: 28, weight: .black, design: .rounded))
                     .monospacedDigit()
 
-                Text("\(completedTodayCount) complete · \(model.pendingReviewsCount) waiting")
+                Text("\(completedTodayCount) complete")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -730,10 +740,6 @@ struct ContentView: View {
     private var dashboardHeadline: String {
         if let activeSession = model.deviceState?.activeSession {
             return "Working on \(activeSession.displayTitle.lowercased())."
-        }
-
-        if model.pendingReviewsCount > 0 {
-            return "Close the loop on the last block before you start the next one."
         }
 
         if todaySessions.isEmpty {
